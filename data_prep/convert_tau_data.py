@@ -10,6 +10,13 @@ from sklearn.model_selection import train_test_split
 from .prompts import create_full_system_prompt, get_all_domains
 
 
+def serialize_for_parquet(obj: Any) -> str:
+    """Serialize complex objects to JSON strings for parquet compatibility."""
+    if isinstance(obj, (dict, list)):
+        return json.dumps(obj, ensure_ascii=False, default=str)
+    return str(obj)
+
+
 def load_tau_bench_data(data_path: str) -> Dict[str, Any]:
     """Load tau_bench training data."""
     print(f"Loading tau_bench data from: {data_path}")
@@ -46,19 +53,19 @@ def convert_task_to_skyrl_format(task: Dict[str, Any]) -> Dict[str, Any]:
         # Create system prompt for domain
         system_prompt = create_full_system_prompt(domain)
         
-        # Create SkyRL-compatible format
+        # Create SkyRL-compatible format with serialized nested structures
         skyrl_task = {
             "data_source": "tau_bench",
-            "prompt": [
+            "prompt": serialize_for_parquet([
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": instruction}
-            ],
+            ]),
             "env_class": "tau_bench",
-            "reward_spec": {
+            "reward_spec": serialize_for_parquet({
                 "method": "tau_bench_reward",
                 "ground_truth": actions
-            },
-            "extra_info": {
+            }),
+            "extra_info": serialize_for_parquet({
                 "domain": domain,
                 "instruction": instruction,
                 "actions": actions,
@@ -66,7 +73,7 @@ def convert_task_to_skyrl_format(task: Dict[str, Any]) -> Dict[str, Any]:
                 "user_id": task.get('user_id', 'unknown'),
                 "complexity": task.get('complexity', 1),
                 "generated_at": task.get('generated_at', 'unknown')
-            }
+            })
         }
         
         return skyrl_task
