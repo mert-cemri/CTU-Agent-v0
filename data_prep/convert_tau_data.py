@@ -29,46 +29,50 @@ def load_tau_bench_data(data_path: str) -> Dict[str, Any]:
 
 def convert_task_to_skyrl_format(task: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a single tau_bench task to SkyRL training format."""
-    # Extract required fields
-    domain = task.get('domain')
-    instruction = task.get('instruction')
-    actions = task.get('actions', [])
-    
-    # Validate required fields
-    if not domain:
-        raise ValueError(f"Task missing domain: {task}")
-    if not instruction:
-        raise ValueError(f"Task missing instruction: {task}")
-    if domain not in get_all_domains():
-        raise ValueError(f"Unknown domain: {domain}")
-    
-    # Create system prompt for domain
-    system_prompt = create_full_system_prompt(domain)
-    
-    # Create SkyRL-compatible format
-    skyrl_task = {
-        "data_source": "tau_bench",
-        "prompt": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": instruction}
-        ],
-        "env_class": "tau_bench",
-        "reward_spec": {
-            "method": "tau_bench_reward",
-            "ground_truth": actions
-        },
-        "extra_info": {
-            "domain": domain,
-            "instruction": instruction,
-            "actions": actions,
-            "annotator": task.get('annotator', 'unknown'),
-            "user_id": task.get('user_id', 'unknown'),
-            "complexity": task.get('complexity', 1),
-            "generated_at": task.get('generated_at', 'unknown')
+    try:
+        # Extract required fields
+        domain = task.get('domain')
+        instruction = task.get('instruction')
+        actions = task.get('actions', [])
+        
+        # Validate required fields
+        if not domain:
+            raise ValueError(f"Task missing domain: {task}")
+        if not instruction:
+            raise ValueError(f"Task missing instruction: {task}")
+        if domain not in get_all_domains():
+            raise ValueError(f"Unknown domain: {domain}")
+        
+        # Create system prompt for domain
+        system_prompt = create_full_system_prompt(domain)
+        
+        # Create SkyRL-compatible format
+        skyrl_task = {
+            "data_source": "tau_bench",
+            "prompt": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": instruction}
+            ],
+            "env_class": "tau_bench",
+            "reward_spec": {
+                "method": "tau_bench_reward",
+                "ground_truth": actions
+            },
+            "extra_info": {
+                "domain": domain,
+                "instruction": instruction,
+                "actions": actions,
+                "annotator": task.get('annotator', 'unknown'),
+                "user_id": task.get('user_id', 'unknown'),
+                "complexity": task.get('complexity', 1),
+                "generated_at": task.get('generated_at', 'unknown')
+            }
         }
-    }
-    
-    return skyrl_task
+        
+        return skyrl_task
+    except Exception as e:
+        print(f"Error converting task: {e}")
+        return None
 
 
 def filter_and_validate_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -158,14 +162,13 @@ def convert_tau_bench_data(
     # Convert to SkyRL format
     print("Converting to SkyRL format...")
     converted_tasks = []
-    
-    for i, task in enumerate(valid_tasks):
+    for task in valid_tasks:
         try:
             skyrl_task = convert_task_to_skyrl_format(task)
-            converted_tasks.append(skyrl_task)
+            if skyrl_task:
+                converted_tasks.append(skyrl_task)
         except Exception as e:
-            print(f"Error converting task {i}: {e}")
-            continue
+            print(f"Skipping task due to conversion error: {e}")
     
     if not converted_tasks:
         raise ValueError("No tasks successfully converted")
@@ -246,4 +249,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
