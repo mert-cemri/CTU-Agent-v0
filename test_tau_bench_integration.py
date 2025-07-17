@@ -201,27 +201,46 @@ get_user_details(user_id="test123")
 ```"""
         
         try:
+            # Add debugging info
+            print(f"  Function call input: {repr(function_call_response)}")
+            print(f"  Available tool names: {[tool['function']['name'] for tool in tools_info]}")
+            
             action = parse_llm_response(function_call_response, tools_info)
             print(f"  Function call format: action type={type(action)}, value={action}")
             if hasattr(action, 'name') and action.name == "get_user_details":
                 print("✓ Function call format works")
             else:
                 print(f"  Function call format returned: {action.name}")
+                if hasattr(action, 'kwargs'):
+                    print(f"  Function call kwargs: {action.kwargs}")
         except Exception as e:
             print(f"  Function call format failed: {e}")
         
         # Test 3: Try direct function name
         direct_response = "get_user_details"
         try:
+            print(f"  Direct input: {repr(direct_response)}")
             action = parse_llm_response(direct_response, tools_info)
             print(f"  Direct format: action type={type(action)}, value={action}")
+            if hasattr(action, 'name') and action.name == "get_user_details":
+                print("✓ Direct format works")
+            else:
+                print(f"  Direct format returned: {action.name}")
         except Exception as e:
             print(f"  Direct format failed: {e}")
         
         # Test 4: Check what the original JSON format returns
         json_response = '{"name": "get_user_details", "arguments": {"user_id": "test123"}}'
-        action = parse_llm_response(json_response, tools_info)
-        print(f"  JSON format: action type={type(action)}, value={action}")
+        try:
+            print(f"  JSON input: {repr(json_response)}")
+            action = parse_llm_response(json_response, tools_info)
+            print(f"  JSON format: action type={type(action)}, value={action}")
+            if hasattr(action, 'name') and action.name == "get_user_details":
+                print("✓ JSON format works")
+            else:
+                print(f"  JSON format returned: {action.name}")
+        except Exception as e:
+            print(f"  JSON format failed: {e}")
         
         # The parser seems to default to "respond" action when it can't parse tool calls
         # Let's test that the respond functionality works correctly

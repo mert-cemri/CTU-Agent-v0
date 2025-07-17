@@ -28,13 +28,24 @@ class TauBenchEnv(BaseTextEnv):
             raise ValueError("instruction field is required in extras")
         if "reward_spec" not in extras:
             raise ValueError("reward_spec field is required in extras")
-        if "ground_truth" not in extras["reward_spec"]:
+        
+        # Handle both serialized and direct reward_spec formats
+        reward_spec = extras["reward_spec"]
+        if isinstance(reward_spec, str):
+            # Parse JSON string
+            try:
+                import json
+                reward_spec = json.loads(reward_spec)
+            except json.JSONDecodeError:
+                raise ValueError("Invalid JSON format in reward_spec")
+        
+        if "ground_truth" not in reward_spec:
             raise ValueError("ground_truth field is required in reward_spec")
         
         # Core environment parameters
         self.domain = extras["domain"]
         self.instruction = extras["instruction"]
-        self.ground_truth_actions = extras["reward_spec"]["ground_truth"]
+        self.ground_truth_actions = reward_spec["ground_truth"]
         
         # User simulation configuration
         self.user_strategy = env_config.get("user_strategy", "llm")
