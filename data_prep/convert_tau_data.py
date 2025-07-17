@@ -182,12 +182,18 @@ def convert_tau_bench_data(
     
     print(f"Successfully converted {len(converted_tasks)} tasks")
     
+    # Extract domains for stratification (deserialize the extra_info)
+    domains = []
+    for task in converted_tasks:
+        extra_info = json.loads(task['extra_info'])
+        domains.append(extra_info['domain'])
+    
     # Split into train and validation
     train_tasks, val_tasks = train_test_split(
         converted_tasks, 
         train_size=train_ratio, 
         random_state=random_state,
-        stratify=[task['extra_info']['domain'] for task in converted_tasks]
+        stratify=domains
     )
     
     print(f"Split: {len(train_tasks)} train, {len(val_tasks)} validation")
@@ -219,11 +225,13 @@ def convert_tau_bench_data(
     val_domains = {}
     
     for task in train_tasks:
-        domain = task['extra_info']['domain']
+        extra_info = json.loads(task['extra_info'])
+        domain = extra_info['domain']
         train_domains[domain] = train_domains.get(domain, 0) + 1
     
     for task in val_tasks:
-        domain = task['extra_info']['domain']
+        extra_info = json.loads(task['extra_info'])
+        domain = extra_info['domain']
         val_domains[domain] = val_domains.get(domain, 0) + 1
     
     print("\nTrain domain distribution:")
