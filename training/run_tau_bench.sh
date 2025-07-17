@@ -10,14 +10,19 @@ CKPT_DIR="$HOME/ckpts/tau_bench"
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
 TENSOR_PARALLEL_SIZE=4
+EPOCHS=5
+
+# Model Configuration
+POLICY_MODEL="Qwen/Qwen2.5-1.5B-Instruct"
+REF_MODEL="Qwen/Qwen2.5-1.5B-Instruct"
 
 # Make sure required directories exist
 mkdir -p $DATA_DIR
 mkdir -p $CKPT_DIR
 
-# Environment variables
-export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
-export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
+# # Environment variables
+# export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
+# export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 
 # Ray environment variable for UV support
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
@@ -25,11 +30,14 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 # Training command
 cd "$(dirname "$0")"
 
-uv run --isolated --extra vllm python main_tau_bench.py \
+# Add SkyRL modules to Python path
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
+
+python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
-  trainer.policy.model.path="Qwen/Qwen2.5-7B-Instruct" \
-  trainer.ref.model.path="Qwen/Qwen2.5-7B-Instruct" \
+  trainer.policy.model.path="$POLICY_MODEL" \
+  trainer.ref.model.path="$REF_MODEL" \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.ref_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.critic_num_gpus_per_node=$NUM_GPUS \
@@ -38,7 +46,7 @@ uv run --isolated --extra vllm python main_tau_bench.py \
   generator.inference_engine_tensor_parallel_size=$TENSOR_PARALLEL_SIZE \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.export_path="$HOME/exports/tau_bench" \
-  trainer.epochs=50 \
+  trainer.epochs=$EPOCHS \
   trainer.train_batch_size=256 \
   trainer.policy_mini_batch_size=64 \
   trainer.micro_train_batch_size_per_gpu=1 \
