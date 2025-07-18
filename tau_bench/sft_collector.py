@@ -5,7 +5,7 @@ import uuid
 import time
 from typing import List, Dict, Any, Optional
 from tau_bench.sft_types import SFTConversation, SFTConversationTurn, SFTDataset, SFTConfig
-from tau_bench.types import SolveResult, EnvRunResult
+from tau_bench.tau_types import SolveResult, EnvRunResult
 
 
 class SFTDataCollector:

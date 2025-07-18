@@ -3,7 +3,7 @@
 from typing import Optional, Union, List
 from tau_bench.envs.base import Env
 from tau_bench.envs.user import UserStrategy
-from tau_bench.types import Task
+from tau_bench.tau_types import Task
 
 
 def get_env(

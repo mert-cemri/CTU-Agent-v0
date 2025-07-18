@@ -1,8 +1,12 @@
 #!/bin/bash
 set -x
 
+# Activate conda environment
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate ctu
+
 # Tau Bench Training Script
-# Train Qwen-7B-Instruct on tau_bench multi-domain conversational AI tasks
+# Train Qwen-1.5B-Instruct on tau_bench multi-domain conversational AI tasks
 
 # Configuration
 DATA_DIR="$HOME/data/tau_bench"
@@ -30,10 +34,8 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 # Training command
 cd "$(dirname "$0")"
 
-# Install vllm if not present and run directly with Python
-# python -c "import vllm" 2>/dev/null || 
-#pip install vllm==0.6.1.post2
-
+# Add SkyRL modules to Python path
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
 
 python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \
@@ -79,7 +81,7 @@ python main_tau_bench.py \
   environment.skyrl_gym.max_env_workers=16 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \
-  trainer.run_name="tau_bench_qwen7b_$(date +%Y%m%d_%H%M%S)" \
+  trainer.run_name="tau_bench_qwen1_5b_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   $@
 

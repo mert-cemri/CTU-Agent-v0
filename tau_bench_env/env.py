@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 
 from skyrl_gym.envs.base_text_env import BaseTextEnv, BaseTextEnvStepOutput, ConversationType
 from tau_bench.envs import get_env
-from tau_bench.types import Action, Task, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
+from tau_bench.tau_types import Action, Task, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
 from tau_bench.envs.user import UserStrategy
 
 from .parser import parse_llm_response, format_tool_info_for_llm
@@ -21,16 +21,19 @@ class TauBenchEnv(BaseTextEnv):
     def __init__(self, env_config: DictConfig, extras: Dict[str, Any] = {}):
         super().__init__()
         
-        # Extract required fields from extras
-        if "domain" not in extras:
+        # Handle serialized fields in extras
+        processed_extras = self._process_extras(extras)
+        
+        # Extract required fields from processed extras
+        if "domain" not in processed_extras:
             raise ValueError("domain field is required in extras")
-        if "instruction" not in extras:
+        if "instruction" not in processed_extras:
             raise ValueError("instruction field is required in extras")
-        if "reward_spec" not in extras:
+        if "reward_spec" not in processed_extras:
             raise ValueError("reward_spec field is required in extras")
         
         # Handle both serialized and direct reward_spec formats
-        reward_spec = extras["reward_spec"]
+        reward_spec = processed_extras["reward_spec"]
         if isinstance(reward_spec, str):
             # Parse JSON string
             try:
@@ -43,14 +46,23 @@ class TauBenchEnv(BaseTextEnv):
             raise ValueError("ground_truth field is required in reward_spec")
         
         # Core environment parameters
-        self.domain = extras["domain"]
-        self.instruction = extras["instruction"]
+        self.domain = processed_extras["domain"]
+        self.instruction = processed_extras["instruction"]
         self.ground_truth_actions = reward_spec["ground_truth"]
         
         # User simulation configuration
         self.user_strategy = env_config.get("user_strategy", "llm")
         self.user_model = env_config.get("user_model", "gpt-4o")
         self.user_provider = env_config.get("user_provider", "openai")
+        
+        # Check if we have API keys for LLM user simulation
+        import os
+        if self.user_strategy == "llm" and self.user_provider == "openai":
+            if not os.environ.get("OPENAI_API_KEY"):
+                print("Warning: OPENAI_API_KEY not set, falling back to rule-based user simulation")
+                self.user_strategy = "rule_based"
+                self.user_model = "rule_based"
+                self.user_provider = None
         
         # Conversation tracking
         self.agent_actions = []  # Actions taken by the agent
@@ -65,6 +77,29 @@ class TauBenchEnv(BaseTextEnv):
         # Environment state
         self.task_initialized = False
         self.conversation_done = False
+    
+    def _process_extras(self, extras: Dict[str, Any]) -> Dict[str, Any]:
+        """Process extras dictionary, deserializing JSON strings as needed."""
+        processed = {}
+        
+        for key, value in extras.items():
+            if isinstance(value, str) and key in ['extra_info', 'reward_spec']:
+                # Try to deserialize JSON strings
+                try:
+                    import json
+                    deserialized = json.loads(value)
+                    if key == 'extra_info':
+                        # Merge extra_info contents into the main dictionary
+                        processed.update(deserialized)
+                    else:
+                        processed[key] = deserialized
+                except (json.JSONDecodeError, TypeError):
+                    # If it's not valid JSON, keep as string
+                    processed[key] = value
+            else:
+                processed[key] = value
+        
+        return processed
         
     def _create_tau_env(self) -> Any:
         """Create tau_bench environment for the specified domain."""

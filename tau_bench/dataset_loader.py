@@ -2,7 +2,7 @@
 
 import json
 from typing import List
-from tau_bench.types import Task, Action
+from tau_bench.tau_types import Task, Action
 
 
 def load_custom_dataset(dataset_path: str) -> List[Task]:

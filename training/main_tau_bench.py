@@ -11,8 +11,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from skyrl_gym.envs.registration import register
 from skyrl_train.entrypoints.main_base import BasePPOExp
-from skyrl_train.utils.config import validate_cfg
-from skyrl_train.utils.distributed import initialize_ray
+from skyrl_train.utils.utils import validate_cfg
+from skyrl_train.utils.utils import initialize_ray
 
 # Get the config directory (relative to this file)
 config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs")
@@ -24,9 +24,17 @@ def skyrl_entrypoint(cfg: DictConfig):
     Ray entrypoint for tau_bench training.
     
     This function runs on a Ray worker and is responsible for:
-    1. Registering the tau_bench environment
-    2. Running the training loop
+    1. Setting up the module path
+    2. Registering the tau_bench environment
+    3. Running the training loop
     """
+    # Add the project root to the path for imports (needed for Ray workers)
+    import sys
+    import os
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if project_root not in sys.path:
+        sys.path.append(project_root)
+    
     # Register the tau_bench environment
     # This needs to be done inside the entrypoint task
     register(

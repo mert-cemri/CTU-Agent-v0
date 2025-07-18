@@ -7,7 +7,7 @@ from tau_bench.envs.healthcare.tools import ALL_TOOLS
 from tau_bench.envs.healthcare.wiki import WIKI
 from typing import Optional, Union, List
 from tau_bench.envs.user import UserStrategy
-from tau_bench.types import Task
+from tau_bench.tau_types import Task
 
 
 class MockHealthcareDomainEnv(Env):

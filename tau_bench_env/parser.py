@@ -3,7 +3,7 @@
 import json
 import re
 from typing import List, Dict, Any, Optional, Union
-from tau_bench.types import Action, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
+from tau_bench.tau_types import Action, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
 
 
 def parse_llm_response(response: Union[str, Dict[str, Any]], available_tools: List[Dict[str, Any]]) -> Action:

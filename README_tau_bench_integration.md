@@ -4,7 +4,7 @@ This project integrates tau_bench's multi-domain conversational AI framework wit
 
 ## Overview
 
-- **Assistant Agent**: Qwen-7B-Instruct (policy model to be trained)
+- **Assistant Agent**: Qwen-1.5B-Instruct (policy model to be trained)
 - **User Proxy**: GPT-4o with tau_bench user simulation strategies
 - **Domains**: airline, healthcare, telecom, doordash, retail
 - **Reward**: Based on tool usage accuracy compared to ground truth actions
@@ -120,7 +120,7 @@ Key configuration options in `training/configs/tau_bench_config.yaml`:
 
 ```yaml
 # Model settings
-trainer.policy.model.path: "Qwen/Qwen2.5-7B-Instruct"
+trainer.policy.model.path: "Qwen/Qwen2.5-1.5B-Instruct"
 
 # Training parameters
 trainer.epochs: 50

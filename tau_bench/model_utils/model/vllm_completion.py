@@ -1,5 +1,24 @@
 import os
-from typing import Any
+fromPRICE_PER_INPUT_TOKEN_MCAPABILITY_SCORE_MAP = {
+    "Qwen/Qwen2-0.5B-Instruct": 0.05,
+    "Qwen/Qwen2-1.5B-Instruct": 0.07,
+    "Qwen/Qwen2.5-1.5B-Instruct": 0.07,
+    "Qwen/Qwen2-7B-Instruct": 0.2,
+    "Qwen/Qwen2-72B-Instruct": 0.4,
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": 0.3,
+    "sierra-research/Meta-Llama-3.1-8B-Instruct": 0.3,
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": 0.4,
+    "mistralai/Mistral-Nemo-Instruct-2407": 0.3,
+} "Qwen/Qwen2-0.5B-Instruct": 0.0,
+    "Qwen/Qwen2-1.5B-Instruct": 0.0,
+    "Qwen/Qwen2.5-1.5B-Instruct": 0.0,
+    "Qwen/Qwen2-7B-Instruct": 0.0,
+    "Qwen/Qwen2-72B-Instruct": 0.0,
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": 0.0,
+    "sierra-research/Meta-Llama-3.1-8B-Instruct": 0.0,
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": 0.0,
+    "mistralai/Mistral-Nemo-Instruct-2407": 0.0,
+}port Any
 
 from pydantic import BaseModel
 
@@ -45,6 +64,7 @@ LATENCY_MS_PER_OUTPUT_TOKEN_FALLBACK = 0.0
 MAX_CONTEXT_LENGTH_MAP = {
     "Qwen/Qwen2-0.5B-Instruct": 32768,
     "Qwen/Qwen2-1.5B-Instruct": 32768,
+    "Qwen/Qwen2.5-1.5B-Instruct": 32768,
     "Qwen/Qwen2-7B-Instruct": 131072,
     "Qwen/Qwen2-72B-Instruct": 131072,
     "meta-llama/Meta-Llama-3.1-8B-Instruct": 128000,

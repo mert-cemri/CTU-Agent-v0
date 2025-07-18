@@ -6,7 +6,7 @@ from tau_bench.envs.tool import Tool
 from typing import Any, Callable, Dict, List, Type, Optional, Set, Union, Tuple
 
 from tau_bench.envs.user import load_user, UserStrategy
-from tau_bench.types import (
+from tau_bench.tau_types import (
     Action,
     Task,
     EnvInfo,
