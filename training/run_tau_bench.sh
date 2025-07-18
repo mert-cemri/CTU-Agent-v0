@@ -30,8 +30,10 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 # Training command
 cd "$(dirname "$0")"
 
-# Add SkyRL modules to Python path
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
+# Install vllm if not present and run directly with Python
+# python -c "import vllm" 2>/dev/null || 
+#pip install vllm==0.6.1.post2
+
 
 python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \

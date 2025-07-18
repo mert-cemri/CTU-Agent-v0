@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from skyrl_gym.envs.registration import register
-from skyrl_train.entrypoints.base import BasePPOExp
+from skyrl_train.entrypoints.main_base import BasePPOExp
 from skyrl_train.utils.config import validate_cfg
 from skyrl_train.utils.distributed import initialize_ray
 
