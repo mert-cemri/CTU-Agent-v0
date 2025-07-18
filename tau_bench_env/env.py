@@ -59,10 +59,11 @@ class TauBenchEnv(BaseTextEnv):
         import os
         if self.user_strategy == "llm" and self.user_provider == "openai":
             if not os.environ.get("OPENAI_API_KEY"):
-                print("Warning: OPENAI_API_KEY not set, falling back to rule-based user simulation")
-                self.user_strategy = "rule_based"
-                self.user_model = "rule_based"
-                self.user_provider = None
+                print("Warning: OPENAI_API_KEY not set")
+                assert False, "OPENAI_API_KEY must be set for LLM user simulation"
+                # self.user_strategy = "rule_based"
+                # self.user_model = "rule_based"
+                # self.user_provider = None
         
         # Conversation tracking
         self.agent_actions = []  # Actions taken by the agent
