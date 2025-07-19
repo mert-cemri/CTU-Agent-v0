@@ -79,7 +79,22 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
     """Extract direct JSON tool calls (for simple JSON strings)."""
     text = text.strip()
     
-    # print(f"DEBUG _extract_direct_json: text='{text}'")
+    # Strip common model-specific tokens that might interfere with JSON parsing
+    tokens_to_strip = [
+        '<|im_end|>',
+        '<|endoftext|>',
+        '<|im_start|>',
+        '</s>',
+        '<s>',
+        '<eos>',
+        '<bos>',
+        '```',
+    ]
+    
+    for token in tokens_to_strip:
+        text = text.replace(token, '').strip()
+    
+    # print(f"DEBUG _extract_direct_json: cleaned text='{text}'")
     # print(f"DEBUG _extract_direct_json: starts with {{: {text.startswith('{')}")
     # print(f"DEBUG _extract_direct_json: ends with }}: {text.endswith('}')}")
     
@@ -87,7 +102,7 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
     if text.startswith('{') and text.endswith('}'):
         try:
             parsed = json.loads(text)
-            print(f"DEBUG _extract_direct_json: parsed JSON: {parsed}")
+            # print(f"DEBUG _extract_direct_json: parsed JSON: {parsed}")
             
             # Handle different JSON structures
             if "name" in parsed and "arguments" in parsed:
@@ -99,7 +114,11 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
                 
                 # Validate tool name
                 if tool_name in tool_names:
+                    # print(f"DEBUG _extract_direct_json: SUCCESS! Returning action for {tool_name}")
                     return Action(name=tool_name, kwargs=kwargs)
+                else:
+                    # print(f"DEBUG _extract_direct_json: tool_name '{tool_name}' not in available tools")
+                    pass
                     
         except json.JSONDecodeError as e:
             # print(f"DEBUG _extract_direct_json: JSON decode error: {e}")
