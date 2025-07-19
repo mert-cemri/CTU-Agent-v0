@@ -59,11 +59,8 @@ class TauBenchEnv(BaseTextEnv):
         import os
         if self.user_strategy == "llm" and self.user_provider == "openai":
             if not os.environ.get("OPENAI_API_KEY"):
-                print("Warning: OPENAI_API_KEY not set")
-                assert False, "OPENAI_API_KEY must be set for LLM user simulation"
-                # self.user_strategy = "rule_based"
-                # self.user_model = "rule_based"
-                # self.user_provider = None
+                print("Warning: OPENAI_API_KEY not set in this environment")
+                print("This might be expected in Ray worker processes - tau_bench will handle authentication")
         
         # Conversation tracking
         self.agent_actions = []  # Actions taken by the agent
@@ -127,6 +124,13 @@ class TauBenchEnv(BaseTextEnv):
     
     def init(self, prompt: ConversationType) -> Tuple[ConversationType, Dict[str, Any]]:
         """Initialize the environment and return the initial prompt."""
+        # print("=" * 50)
+        # print("DEBUG: init() called with prompt:")
+        # print("Type:", type(prompt))
+        # print("Content:", prompt)
+        # print("Repr:", repr(prompt))
+        # print("=" * 50)
+        
         # Reset environment state
         self.turns = 0
         self.agent_actions = []
@@ -156,15 +160,42 @@ class TauBenchEnv(BaseTextEnv):
     
     def _create_enhanced_prompt(self, original_prompt: ConversationType, user_message: str) -> ConversationType:
         """Create enhanced prompt with domain-specific context and tool information."""
+        
+        # Debug: Print the type and content of original_prompt
+        # print("=" * 50)
+        # print("DEBUG: original_prompt type:", type(original_prompt))
+        # print("DEBUG: original_prompt content:", original_prompt)
+        # print("=" * 50)
+        
+        # Handle the case where original_prompt is a string instead of a list
+        if isinstance(original_prompt, str):
+            print("INFO: original_prompt is a string, parsing as JSON...")
+            try:
+                import json
+                original_prompt = json.loads(original_prompt)
+                print("SUCCESS: Parsed original_prompt as JSON")
+            except json.JSONDecodeError as e:
+                print(f"ERROR: Could not parse original_prompt as JSON: {e}")
+                # Create a default prompt structure
+                original_prompt = [{"role": "user", "content": original_prompt}]
+        
         # Extract system message if it exists
         system_content = ""
         user_content = ""
         
-        for message in original_prompt:
-            if message["role"] == "system":
-                system_content = message["content"]
-            elif message["role"] == "user":
-                user_content = message["content"]
+        # Now process the messages (should be a proper list now)
+        for i, message in enumerate(original_prompt):
+            # print(f"DEBUG: Processing message {i}: {type(message)} = {message}")
+            try:
+                if isinstance(message, dict) and "role" in message and "content" in message:
+                    if message["role"] == "system":
+                        system_content = message["content"]
+                    elif message["role"] == "user":
+                        user_content = message["content"]
+                else:
+                    print(f"WARNING: Message {i} is not a proper dict: {message}")
+            except Exception as e:
+                print(f"ERROR: Exception processing message {i}: {e}")
         
         # Create comprehensive system prompt
         domain_context = f"""
@@ -173,11 +204,13 @@ You are a helpful assistant for {self.domain} customer service. You have access 
 Available tools:
 {format_tool_info_for_llm(self.tools_info)}
 
-Instructions:
-- Use the available tools to help the customer with their request
-- When using tools, format your response as JSON: {{"name": "tool_name", "arguments": {{"param": "value"}}}}
+IMPORTANT INSTRUCTIONS:
+- When you need to use a tool, respond ONLY with valid JSON in this exact format:
+  {{"name": "tool_name", "arguments": {{"param": "value"}}}}
+- Do NOT add any text before or after the JSON
+- Do NOT use markdown code blocks
+- For regular conversation (no tools needed), respond naturally
 - Always be helpful and professional
-- If you can't complete a task, explain why and suggest alternatives
 """
         
         # Combine with original system content
@@ -192,6 +225,7 @@ Instructions:
             {"role": "user", "content": user_message}  # Use the actual user message from tau_bench
         ]
         
+        # print("DEBUG: Created enhanced_prompt:", enhanced_prompt)
         return enhanced_prompt
     
     def step(self, action: str) -> BaseTextEnvStepOutput:
@@ -269,4 +303,4 @@ Instructions:
         self.task_initialized = False
         self.conversation_done = False
         self.agent_actions = []
-        self.conversation_history = [] 
+        self.conversation_history = []

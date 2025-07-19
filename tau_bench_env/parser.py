@@ -21,9 +21,9 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], available_tools: Li
     tool_names = {tool["function"]["name"] for tool in available_tools}
     
     # Debug print
-    print(f"DEBUG: tool_names = {tool_names}")
-    print(f"DEBUG: response type = {type(response)}")
-    print(f"DEBUG: response = {repr(response)}")
+    # print(f"DEBUG: tool_names = {tool_names}")
+    # print(f"DEBUG: response type = {type(response)}")
+    # print(f"DEBUG: response = {repr(response)}")
     
     # Handle dictionary input (e.g., OpenAI tool calls format)
     if isinstance(response, dict):
@@ -38,37 +38,37 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], available_tools: Li
         # Try to extract direct JSON tool calls first (for simple JSON strings)
         action = _extract_direct_json(response, tool_names)
         if action:
-            print(f"DEBUG: Found action via direct JSON: {action}")
+            # print(f"DEBUG: Found action via direct JSON: {action}")
             return action
         
         # Try to extract JSON tool calls from text/markdown
         action = _extract_json_tool_call(response, tool_names)
         if action:
-            print(f"DEBUG: Found action via JSON extraction: {action}")
+            # print(f"DEBUG: Found action via JSON extraction: {action}")
             return action
         
         # Try to extract ReAct-style tool calls
         action = _extract_react_tool_call(response, tool_names)
         if action:
-            print(f"DEBUG: Found action via ReAct: {action}")
+            # print(f"DEBUG: Found action via ReAct: {action}")
             return action
         
         # Try to extract function calls from code blocks
         action = _extract_function_call(response, tool_names, available_tools)
         if action:
-            print(f"DEBUG: Found action via function call: {action}")
+            # print(f"DEBUG: Found action via function call: {action}")
             return action
         
         # Check if it's just a tool name
         response_clean = response.strip()
-        print(f"DEBUG: Checking direct tool name: '{response_clean}' in {tool_names}")
+        # print(f"DEBUG: Checking direct tool name: '{response_clean}' in {tool_names}")
         if response_clean in tool_names:
-            print(f"DEBUG: Found direct tool name: {response_clean}")
+            # print(f"DEBUG: Found direct tool name: {response_clean}")
             return Action(name=response_clean, kwargs={})
     
     # Fall back to respond action with the full text
     response_text = response if isinstance(response, str) else json.dumps(response)
-    print(f"DEBUG: Falling back to respond action")
+    # print(f"DEBUG: Falling back to respond action")
     return Action(
         name=RESPOND_ACTION_NAME,
         kwargs={RESPOND_ACTION_FIELD_NAME: response_text.strip()}
@@ -79,9 +79,9 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
     """Extract direct JSON tool calls (for simple JSON strings)."""
     text = text.strip()
     
-    print(f"DEBUG _extract_direct_json: text='{text}'")
-    print(f"DEBUG _extract_direct_json: starts with {{: {text.startswith('{')}")
-    print(f"DEBUG _extract_direct_json: ends with }}: {text.endswith('}')}")
+    # print(f"DEBUG _extract_direct_json: text='{text}'")
+    # print(f"DEBUG _extract_direct_json: starts with {{: {text.startswith('{')}")
+    # print(f"DEBUG _extract_direct_json: ends with }}: {text.endswith('}')}")
     
     # Check if the entire text is a JSON object
     if text.startswith('{') and text.endswith('}'):
@@ -95,17 +95,17 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
                 tool_name = parsed["name"]
                 kwargs = parsed["arguments"]
                 
-                print(f"DEBUG _extract_direct_json: tool_name='{tool_name}', in tool_names: {tool_name in tool_names}")
+                # print(f"DEBUG _extract_direct_json: tool_name='{tool_name}', in tool_names: {tool_name in tool_names}")
                 
                 # Validate tool name
                 if tool_name in tool_names:
                     return Action(name=tool_name, kwargs=kwargs)
                     
         except json.JSONDecodeError as e:
-            print(f"DEBUG _extract_direct_json: JSON decode error: {e}")
+            # print(f"DEBUG _extract_direct_json: JSON decode error: {e}")
             pass
     
-    print(f"DEBUG _extract_direct_json: returning None")
+    # print(f"DEBUG _extract_direct_json: returning None")
     return None
 
 

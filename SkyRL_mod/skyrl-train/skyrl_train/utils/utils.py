@@ -268,6 +268,11 @@ def initialize_ray(cfg: DictConfig):
         logger.info("Exporting wandb api key to ray runtime env")
         env_vars["WANDB_API_KEY"] = os.environ["WANDB_API_KEY"]
 
+    # Export OpenAI API key for tau_bench user simulation
+    if os.environ.get("OPENAI_API_KEY"):
+        logger.info("Exporting OpenAI API key to ray runtime env")
+        env_vars["OPENAI_API_KEY"] = os.environ["OPENAI_API_KEY"]
+
     if os.environ.get("SKYRL_LD_LIBRARY_PATH_EXPORT"):
         # export `LD_LIBRARY_PATH` to ray runtime env.
         # For some reason the `LD_LIBRARY_PATH` is not exported to the worker with .env file.

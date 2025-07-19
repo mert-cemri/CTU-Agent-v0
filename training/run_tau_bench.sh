@@ -1,9 +1,9 @@
 #!/bin/bash
-set -x
+# set -x
 
-# Activate conda environment
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate ctu
+# # Activate conda environment
+# source ~/miniconda3/etc/profile.d/conda.sh
+# conda activate ctu
 
 # Tau Bench Training Script
 # Train Qwen-1.5B-Instruct on tau_bench multi-domain conversational AI tasks
@@ -25,8 +25,8 @@ mkdir -p $DATA_DIR
 mkdir -p $CKPT_DIR
 
 # # Environment variables
-# export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
-# export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
+export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
+export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 
 # Ray environment variable for UV support
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
@@ -37,7 +37,7 @@ cd "$(dirname "$0")"
 # Add SkyRL modules to Python path
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
 
-python main_tau_bench.py \
+HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.policy.model.path="$POLICY_MODEL" \

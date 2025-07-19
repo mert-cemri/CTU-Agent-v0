@@ -53,7 +53,12 @@ def main(cfg: DictConfig) -> None:
     # Validate the configuration
     validate_cfg(cfg)
     
-    # Initialize Ray cluster
+    # Ensure OpenAI API key is available
+    import os
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY environment variable is required for tau_bench user simulation")
+    
+    # Initialize Ray cluster (will include OpenAI API key in runtime env)
     initialize_ray(cfg)
     
     # Run the training entrypoint
