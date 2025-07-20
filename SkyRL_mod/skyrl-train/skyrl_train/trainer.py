@@ -689,6 +689,9 @@ class RayPPOTrainer:
         responses: List[List[int]] = generator_output["response_ids"]
         per_token_rewards: List[List[float]] = []
         for reward, response in zip(rewards, responses):
+            if len(response) == 0:
+                per_token_rewards.append([])
+                continue
             per_token_reward = [0] * len(response)
             per_token_reward[-1] = float(reward)
             per_token_rewards.append(per_token_reward)
