@@ -55,7 +55,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy_mini_batch_size=64 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=2 \
-  trainer.max_prompt_length=4096 \
+  trainer.max_prompt_length=8192 \
   trainer.eval_batch_size=128 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
@@ -70,14 +70,16 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.async_engine=true \
   generator.n_samples_per_prompt=3 \
   generator.gpu_memory_utilization=0.7 \
-  generator.sampling_params.max_generate_length=2048 \
+  generator.max_input_length=8192 \
+  generator.max_model_len=16384 \
+  generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.7 \
   generator.sampling_params.top_p=0.9 \
   environment.env_class="tau_bench" \
   environment.skyrl_gym.tau_bench.user_strategy="llm" \
   environment.skyrl_gym.tau_bench.user_model="gpt-4o" \
   environment.skyrl_gym.tau_bench.user_provider="openai" \
-  environment.skyrl_gym.tau_bench.max_turns=20 \
+  environment.skyrl_gym.tau_bench.max_turns=6 \
   environment.skyrl_gym.max_env_workers=16 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \
@@ -88,3 +90,5 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
 echo "Exports saved to: $HOME/exports/tau_bench" 
+
+#6 from 20
