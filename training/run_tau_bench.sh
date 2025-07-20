@@ -37,6 +37,9 @@ cd "$(dirname "$0")"
 # Add SkyRL modules to Python path
 export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
 
+# Kill any existing Ray processes to ensure clean start
+ray stop || true
+
 HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
@@ -55,7 +58,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy_mini_batch_size=64 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=2 \
-  trainer.max_prompt_length=8192 \
+  trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=128 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
@@ -70,11 +73,11 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.async_engine=true \
   generator.n_samples_per_prompt=3 \
   generator.gpu_memory_utilization=0.7 \
-  generator.max_input_length=8192 \
-  generator.max_model_len=16384 \
+  generator.max_input_length=16384 \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.7 \
   generator.sampling_params.top_p=0.9 \
+  generator.override_existing_update_group="force_new" \
   environment.env_class="tau_bench" \
   environment.skyrl_gym.tau_bench.user_strategy="llm" \
   environment.skyrl_gym.tau_bench.user_model="gpt-4o" \
