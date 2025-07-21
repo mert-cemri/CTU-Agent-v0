@@ -9,7 +9,7 @@
 # Train Qwen-1.5B-Instruct on tau_bench multi-domain conversational AI tasks
 
 # Configuration
-DATA_DIR="$HOME/data/tau_bench"
+DATA_DIR="data/tau_bench_retail"
 CKPT_DIR="$HOME/ckpts/tau_bench"
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2

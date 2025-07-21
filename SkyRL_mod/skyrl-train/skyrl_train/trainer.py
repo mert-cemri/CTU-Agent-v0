@@ -252,7 +252,15 @@ class RayPPOTrainer:
 
                     # 1.2 postprocess rewards
                     with Timer("postprocess_generator_output", self.all_timings):
-                        generator_output = self.postprocess_generator_output(generator_output, uids)
+                        # generator_output = self.postprocess_generator_output(generator_output, uids)
+                        generator_output, uids = self.postprocess_generator_output(generator_output, uids)
+
+                    # If the entire batch was filtered, skip to the next iteration
+                    if not uids:
+                        logger.warning("Skipping training step because the entire batch was invalid.")
+                        self.global_step += 1
+                        pbar.update(1)
+                        continue
 
                     # 2. print example just for debugging
                     vis = self.tokenizer.decode(generator_output["response_ids"][0])
@@ -673,7 +681,9 @@ class RayPPOTrainer:
         return generator_output
 
     @torch.no_grad()
-    def postprocess_generator_output(self, generator_output: GeneratorOutput, uids: List[str]) -> GeneratorOutput:
+    def postprocess_generator_output(
+        self, generator_output: GeneratorOutput, uids: List[str]
+    ) -> Tuple[GeneratorOutput, List[str]]:
         """
         Converts to per token rewards and computes pass@N.
 
@@ -707,7 +717,31 @@ class RayPPOTrainer:
 
         # re-assign reward but now it's per token rewards
         generator_output["rewards"] = per_token_rewards
-        return generator_output
+        # return generator_output
+
+        # Filter out empty responses
+        valid_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) > 0]
+
+        if len(valid_indices) == len(uids):
+            # No filtering needed
+            return generator_output, uids
+
+        logger.info(f"Filtered out {len(uids) - len(valid_indices)} empty responses.")
+
+        if not valid_indices:
+            # All responses were empty, return empty generator_output and empty uids
+            for key in ["prompts", "prompt_token_ids", "response_ids", "rewards", "loss_masks"]:
+                if key in generator_output:
+                    generator_output[key] = []
+            return generator_output, []
+
+        for key in ["prompts", "prompt_token_ids", "response_ids", "rewards", "loss_masks"]:
+            if key in generator_output:
+                generator_output[key] = [generator_output[key][i] for i in valid_indices]
+
+        valid_uids = [uids[i] for i in valid_indices]
+
+        return generator_output, valid_uids
 
     @torch.no_grad()
     def compute_advantages_and_returns(self, data: TrainingInputBatch) -> TrainingInputBatch:

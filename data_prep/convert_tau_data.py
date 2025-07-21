@@ -17,20 +17,38 @@ def serialize_for_parquet(obj: Any) -> str:
     return str(obj)
 
 
-def load_tau_bench_data(data_path: str) -> Dict[str, Any]:
-    """Load tau_bench training data."""
-    print(f"Loading tau_bench data from: {data_path}")
-    
-    if not os.path.exists(data_path):
-        raise FileNotFoundError(f"Data file not found: {data_path}")
-    
-    with open(data_path, 'r') as f:
-        data = json.load(f)
-    
-    if 'tasks' not in data:
-        raise ValueError("Expected 'tasks' key in data file")
-    
-    print(f"Loaded {len(data['tasks'])} tasks")
+def load_tau_bench_data(path: str) -> List[Dict[str, Any]]:
+    """Load data from a JSON file or a Python module."""
+    print(f"Loading tau_bench data from: {path}")
+    if path.endswith(".json"):
+        with open(path, "r") as f:
+            data = json.load(f)
+    elif path.endswith(".py"):
+        import importlib.util
+        import sys
+        
+        module_name = "tau_bench.temp_tasks"
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if spec is None:
+            raise ImportError(f"Could not load spec for module at {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        
+        if not hasattr(module, "TASKS_TRAIN"):
+            raise ValueError(f"Python module at {path} must define a 'TASKS_TRAIN' variable")
+            
+        # Convert Task objects to dictionaries and add domain
+        tasks = getattr(module, "TASKS_TRAIN")
+        data = []
+        for task in tasks:
+            task_dict = task.model_dump()
+            if 'domain' not in task_dict or not task_dict['domain']:
+                task_dict['domain'] = 'retail' # Add domain if missing
+            data.append(task_dict)
+    else:
+        raise ValueError(f"Unsupported file type: {path}. Must be .json or .py")
+        
     return data
 
 
@@ -123,7 +141,7 @@ def filter_and_validate_tasks(tasks: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 
 def convert_tau_bench_data(
-    input_path: str, 
+    tasks: List[Dict[str, Any]], 
     output_dir: str, 
     train_ratio: float = 0.9,
     max_tasks_per_domain: int = None,
@@ -133,16 +151,12 @@ def convert_tau_bench_data(
     Convert tau_bench training data to SkyRL format.
     
     Args:
-        input_path: Path to tau_bench novel_sft_dataset.json
+        input_path: Path to tau_bench novel_sft_dataset.json or a Python file defining TASKS_TRAIN
         output_dir: Directory to save converted parquet files
         train_ratio: Ratio of data to use for training (rest for validation)
         max_tasks_per_domain: Maximum tasks per domain (for testing)
         random_state: Random seed for reproducibility
     """
-    # Load original data
-    original_data = load_tau_bench_data(input_path)
-    tasks = original_data['tasks']
-    
     # Filter and validate tasks
     valid_tasks = filter_and_validate_tasks(tasks)
     
@@ -246,7 +260,7 @@ def convert_tau_bench_data(
 def main():
     """Main function for command-line usage."""
     parser = argparse.ArgumentParser(description="Convert tau_bench data to SkyRL format")
-    parser.add_argument("--input_path", required=True, help="Path to tau_bench novel_sft_dataset.json")
+    parser.add_argument("--input_path", required=True, help="Path to tau_bench data file (.json or .py)")
     parser.add_argument("--output_dir", required=True, help="Output directory for parquet files")
     parser.add_argument("--train_ratio", type=float, default=0.9, help="Training data ratio")
     parser.add_argument("--max_tasks_per_domain", type=int, help="Max tasks per domain (for testing)")
@@ -254,8 +268,13 @@ def main():
     
     args = parser.parse_args()
     
+    # Load data based on file type
+    tasks = load_tau_bench_data(args.input_path)
+    if isinstance(tasks, dict) and 'tasks' in tasks:
+        tasks = tasks['tasks'] # Handle original JSON structure
+        
     convert_tau_bench_data(
-        input_path=args.input_path,
+        tasks=tasks,
         output_dir=args.output_dir,
         train_ratio=args.train_ratio,
         max_tasks_per_domain=args.max_tasks_per_domain,
