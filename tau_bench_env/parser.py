@@ -6,19 +6,17 @@ from typing import List, Dict, Any, Optional, Union
 from tau_bench.tau_types import Action, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
 
 
-def parse_llm_response(response: Union[str, Dict[str, Any]], available_tools: List[Dict[str, Any]]) -> Action:
+def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Dict[str, Any]]) -> Action:
     """
-    Parse raw LLM response to extract tool calls and convert to tau_bench Action objects.
-    
-    Args:
-        response: Raw LLM response (string) or structured response (dict)
-        available_tools: List of available tool info dictionaries
-        
-    Returns:
-        Action object with tool name and kwargs
+    Parse the LLM response and return a tau_bench Action.
     """
-    # Extract tool names for validation
-    tool_names = {tool["function"]["name"] for tool in available_tools}
+    # Pre-process a dict response to handle nested tool_name
+    if isinstance(response, dict):
+        if "tool_name" in response and isinstance(response["tool_name"], dict):
+            if "name" in response["tool_name"]:
+                response["tool_name"] = response["tool_name"]["name"]
+
+    tool_names = [tool["name"] for tool in tools_info]
     
     # Debug print
     # print(f"DEBUG: tool_names = {tool_names}")
@@ -54,7 +52,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], available_tools: Li
             return action
         
         # Try to extract function calls from code blocks
-        action = _extract_function_call(response, tool_names, available_tools)
+        action = _extract_function_call(response, tool_names, tools_info)
         if action:
             # print(f"DEBUG: Found action via function call: {action}")
             return action
@@ -84,8 +82,8 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
         '<|im_end|>',
         '<|endoftext|>',
         '<|im_start|>',
-        '</s>',
-        '<s>',
+        '',
+        '',
         '<eos>',
         '<bos>',
         '```',
