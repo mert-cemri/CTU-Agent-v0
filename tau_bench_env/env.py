@@ -1,6 +1,7 @@
 # Copyright Sierra
 
 import json
+import os
 from typing import Dict, Any, List, Tuple, Optional
 from omegaconf import DictConfig
 
@@ -197,54 +198,52 @@ class TauBenchEnv(BaseTextEnv):
             except Exception as e:
                 print(f"ERROR: Exception processing message {i}: {e}")
         
-        # Create comprehensive system prompt with few-shot examples
-        # Get first two tools for examples (if available)
-        example_tools = self.tools_info[:2] if len(self.tools_info) >= 2 else self.tools_info
-        
-        few_shot_examples = ""
-        if len(example_tools) > 0:
-            tool1 = example_tools[0]["function"]
-            tool1_params = list(tool1["parameters"]["properties"].keys())
-            param1 = tool1_params[0] if tool1_params else "param"
-            
-            few_shot_examples = f"""
-
-EXAMPLES OF CORRECT TOOL USAGE:
-
-Example 1 - Using a tool:
-User: Can you check the details for user123?
-Assistant: {{"name": "{tool1['name']}", "arguments": {{"{param1}": "user123"}}}}
-
-Example 2 - Regular response (no tool needed):
-User: Thank you for your help!
-Assistant: You're welcome! Is there anything else I can help you with today?
-"""
-            
-            if len(example_tools) > 1:
-                tool2 = example_tools[1]["function"]
-                tool2_params = list(tool2["parameters"]["properties"].keys())
-                param2 = tool2_params[0] if tool2_params else "param"
-                
-                few_shot_examples += f"""
-Example 3 - Using another tool:
-User: What information do you have about item456?
-Assistant: {{"name": "{tool2['name']}", "arguments": {{"{param2}": "item456"}}}}
-"""
-        
+        # Create comprehensive system prompt with OpenAI-style tool calling examples
         domain_context = f"""
 You are a helpful assistant for {self.domain} customer service. You have access to various tools to help customers.
 
 Available tools:
 {format_tool_info_for_llm(self.tools_info)}
 
-IMPORTANT INSTRUCTIONS:
-- When you need to use a tool, respond ONLY with valid JSON in this exact format:
-  {{"name": "tool_name", "arguments": {{"param": "value"}}}}
-- Do NOT add any text before or after the JSON
+CRITICAL INSTRUCTIONS FOR TOOL USAGE:
+You MUST respond in one of these two ways:
+
+1. For regular conversation (no tool needed):
+   Simply respond with helpful text.
+
+2. For tool usage:
+   Output ONLY a valid JSON object with this EXACT structure:
+   {{"tool_calls": [{{"function": {{"name": "tool_name", "arguments": "{{\\"param\\": \\"value\\"}}"}}}}]}}
+
+IMPORTANT: 
+- The "arguments" field must be a JSON string (not a JSON object)
+- Do NOT add any text before or after the JSON when using tools
 - Do NOT use markdown code blocks
-- For regular conversation (no tools needed), respond naturally
-- Always be helpful and professional
-{few_shot_examples}
+- Do NOT include <|im_end|> or any other tokens
+
+EXAMPLES OF CORRECT USAGE:
+
+Example 1 - Finding a user by name and zip:
+User: My name is Yusuf Rossi and my zip is 19122. I need help with my order.
+Assistant: {{"tool_calls": [{{"function": {{"name": "find_user_id_by_name_zip", "arguments": "{{\\"first_name\\": \\"Yusuf\\", \\"last_name\\": \\"Rossi\\", \\"zip\\": \\"19122\\"}}"}}}}]}}
+
+Example 2 - Getting user details:
+User: [Previous tool returned user_id: yusuf_rossi_9620]
+Assistant: {{"tool_calls": [{{"function": {{"name": "get_user_details", "arguments": "{{\\"user_id\\": \\"yusuf_rossi_9620\\"}}"}}}}]}}
+
+Example 3 - Getting order details:
+User: [User has order #W4776164]
+Assistant: {{"tool_calls": [{{"function": {{"name": "get_order_details", "arguments": "{{\\"order_id\\": \\"#W4776164\\"}}"}}}}]}}
+
+Example 4 - Regular conversation (no tool):
+User: Thank you for your help!
+Assistant: You're welcome! Is there anything else I can help you with today?
+
+Example 5 - Canceling an order:
+User: I want to cancel order #W2989580
+Assistant: {{"tool_calls": [{{"function": {{"name": "cancel_pending_order", "arguments": "{{\\"order_id\\": \\"#W2989580\\"}}"}}}}]}}
+
+Remember: When you need to use a tool, output ONLY the JSON object, nothing else!
 """
         
         # Combine with original system content
@@ -281,6 +280,10 @@ IMPORTANT INSTRUCTIONS:
         
         # Update conversation history
         self.conversation_history.append({"role": "assistant", "content": action})
+        
+        # Log complete conversation rollouts for observability
+        if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
+            self._log_conversation_rollout(parsed_action, tau_result)
         
         # Check if conversation is done
         done = tau_result.done or self.turns >= self.max_turns
@@ -338,3 +341,56 @@ IMPORTANT INSTRUCTIONS:
         self.conversation_done = False
         self.agent_actions = []
         self.conversation_history = []
+        
+    def _log_conversation_rollout(self, parsed_action, tau_result):
+        """Log complete conversation rollout for observability"""
+        print(f"\n{'='*80}")
+        print(f"CONVERSATION ROLLOUT (Turn {self.turns}/{self.max_turns})")
+        print(f"Domain: {self.domain} | Task: {self.instruction[:100]}...")
+        print(f"{'='*80}")
+        
+        # Show last few conversation turns (up to 6 messages)
+        recent_history = self.conversation_history[-6:] if len(self.conversation_history) >= 6 else self.conversation_history
+        
+        for i, msg in enumerate(recent_history):
+            role = msg["role"].upper()
+            content = msg["content"]
+            
+            if role == "USER":
+                print(f"\n🧑 USER:")
+                print(f"   {content}")
+            elif role == "ASSISTANT":
+                print(f"\n🤖 ASSISTANT:")
+                # Try to parse if it's a tool call
+                try:
+                    import json
+                    if content.strip().startswith('{') and 'tool_calls' in content:
+                        parsed = json.loads(content.strip())
+                        if 'tool_calls' in parsed:
+                            tool_call = parsed['tool_calls'][0]
+                            func_name = tool_call['function']['name']
+                            func_args = tool_call['function']['arguments']
+                            print(f"   🔧 TOOL CALL: {func_name}")
+                            print(f"   📋 ARGUMENTS: {func_args}")
+                        else:
+                            print(f"   💬 RESPONSE: {content[:200]}{'...' if len(content) > 200 else ''}")
+                    else:
+                        print(f"   💬 RESPONSE: {content[:200]}{'...' if len(content) > 200 else ''}")
+                except:
+                    print(f"   💬 RESPONSE: {content[:200]}{'...' if len(content) > 200 else ''}")
+            elif role == "TOOL":
+                print(f"\n⚙️  TOOL RESULT:")
+                print(f"   {content[:300]}{'...' if len(content) > 300 else ''}")
+        
+        # Show current action details
+        print(f"\n🎯 CURRENT ACTION:")
+        print(f"   Tool: {parsed_action.name}")
+        print(f"   Args: {parsed_action.kwargs}")
+        
+        # Show environment result
+        print(f"\n📊 ENV RESULT:")
+        print(f"   Done: {tau_result.done}")
+        print(f"   Reward: {getattr(tau_result, 'reward', 'N/A')}")
+        print(f"   Next obs length: {len(str(tau_result.observation))}")
+        
+        print(f"{'='*80}\n")

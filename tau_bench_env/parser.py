@@ -40,16 +40,25 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
     
     # Handle string input
     if isinstance(response, str):
-        # Try to extract direct JSON tool calls first (for simple JSON strings)
+        # Try to parse as OpenAI tool_calls format first (highest priority)
+        action = _extract_openai_tool_calls(response, tool_names)
+        if action:
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"DEBUG: Successfully parsed OpenAI tool_calls format")
+            return action
+        
+        # Try to extract direct JSON tool calls (for simple JSON strings)
         action = _extract_direct_json(response, tool_names)
         if action:
-            # print(f"DEBUG: Found action via direct JSON: {action}")
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"DEBUG: Successfully parsed direct JSON format")
             return action
         
         # Try to extract JSON tool calls from text/markdown
         action = _extract_json_tool_call(response, tool_names)
         if action:
-            # print(f"DEBUG: Found action via JSON extraction: {action}")
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"DEBUG: Successfully parsed embedded JSON format")
             return action
         
         # Try to extract ReAct-style tool calls
@@ -86,6 +95,54 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
         name=RESPOND_ACTION_NAME,
         kwargs={RESPOND_ACTION_FIELD_NAME: response_text.strip()}
     )
+
+
+def _extract_openai_tool_calls(text: str, tool_names: set) -> Optional[Action]:
+    """Extract OpenAI-style tool_calls format from text."""
+    text = text.strip()
+    
+    # Remove common model-specific tokens
+    tokens_to_strip = ['<|im_end|>', '<|endoftext|>', '<|im_start|>', '<eos>', '<bos>']
+    for token in tokens_to_strip:
+        text = text.replace(token, '').strip()
+    
+    # Check if it looks like a tool_calls JSON object
+    if text.startswith('{') and 'tool_calls' in text:
+        try:
+            parsed = json.loads(text)
+            
+            # Handle OpenAI tool_calls format: {"tool_calls": [{"function": {"name": "...", "arguments": "..."}}]}
+            if "tool_calls" in parsed and isinstance(parsed["tool_calls"], list) and len(parsed["tool_calls"]) > 0:
+                first_call = parsed["tool_calls"][0]
+                
+                if "function" in first_call:
+                    func_info = first_call["function"]
+                    tool_name = func_info.get("name")
+                    arguments_str = func_info.get("arguments", "{}")
+                    
+                    # Validate tool name
+                    if tool_name and tool_name in tool_names:
+                        # Parse arguments (they should be a JSON string)
+                        try:
+                            if isinstance(arguments_str, str):
+                                kwargs = json.loads(arguments_str)
+                            else:
+                                kwargs = arguments_str  # Already parsed
+                        except json.JSONDecodeError:
+                            # If arguments can't be parsed, try as-is
+                            kwargs = arguments_str if isinstance(arguments_str, dict) else {}
+                        
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"DEBUG: Parsed OpenAI tool call - tool: {tool_name}, args: {kwargs}")
+                        
+                        return Action(name=tool_name, kwargs=kwargs)
+                        
+        except json.JSONDecodeError as e:
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"DEBUG: Failed to parse tool_calls JSON: {e}")
+            pass
+    
+    return None
 
 
 def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
