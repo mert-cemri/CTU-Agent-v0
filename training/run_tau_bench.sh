@@ -59,12 +59,12 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.export_path="$HOME/exports/tau_bench" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=256 \
-  trainer.policy_mini_batch_size=64 \
+  trainer.train_batch_size=128 \
+  trainer.policy_mini_batch_size=32 \
   trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=128 \
+  trainer.eval_batch_size=64 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
