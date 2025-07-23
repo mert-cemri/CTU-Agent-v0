@@ -16,7 +16,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
             if "name" in response["tool_name"]:
                 response["tool_name"] = response["tool_name"]["name"]
 
-    tool_names = [tool["name"] for tool in tools_info]
+    tool_names = [tool["function"]["name"] for tool in tools_info]
     
     # Debug print
     # print(f"DEBUG: tool_names = {tool_names}")
