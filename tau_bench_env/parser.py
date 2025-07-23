@@ -1,14 +1,60 @@
 # Copyright Sierra
 
 import json
+import os
 import re
 from typing import List, Dict, Any, Optional, Union
 from tau_bench.tau_types import Action, RESPOND_ACTION_NAME, RESPOND_ACTION_FIELD_NAME
 
 
-def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Dict[str, Any]]) -> Action:
+def _validate_and_sanitize_kwargs(kwargs: Any, tool_name: str, debug_context: str = "") -> Dict[str, Any]:
+    """
+    Validate and sanitize kwargs to ensure they're a dictionary for Action creation.
+    
+    Args:
+        kwargs: The kwargs value to validate (could be any type)
+        tool_name: Name of the tool for logging context
+        debug_context: Additional context for debugging
+    
+    Returns:
+        A valid dictionary for Action.kwargs
+    """
+    import os
+    
+    if isinstance(kwargs, dict):
+        return kwargs
+    
+    # Log the problematic case for debugging
+    if os.environ.get("DEBUG_PARSER", "0") == "1":
+        print(f"\n⚠️  KWARGS VALIDATION WARNING:")
+        print(f"   Tool: {tool_name}")
+        print(f"   Context: {debug_context}")
+        print(f"   Expected: dict, Got: {type(kwargs).__name__}")
+        print(f"   Value: {repr(kwargs)}")
+        print(f"   Converting to empty dict to prevent crash")
+    
+    # Handle common cases where we can salvage something useful
+    if isinstance(kwargs, str):
+        try:
+            # Try to parse as JSON
+            parsed = json.loads(kwargs)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    
+    # Fallback: return empty dict to prevent ValidationError
+    return {}
+
+
+def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Dict[str, Any]], source: str = "unknown") -> Action:
     """
     Parse the LLM response and return a tau_bench Action.
+    
+    Args:
+        response: The response to parse (from agent or user)
+        tools_info: Available tools information
+        source: Source of response ("agent", "user", or "unknown")
     """
     # Pre-process a dict response to handle nested tool_name
     if isinstance(response, dict):
@@ -18,17 +64,35 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
 
     tool_names = [tool["function"]["name"] for tool in tools_info]
     
-    # Enhanced debug logging
+    # Enhanced debug logging with source awareness
     import os
     if os.environ.get("DEBUG_PARSER", "0") == "1":
-        print(f"\n=== PARSER DEBUG ===")
+        print(f"\n=== PARSER DEBUG ({source.upper()}) ===")
         print(f"Available tools: {tool_names}")
         print(f"Response type: {type(response)}")
         if isinstance(response, str):
             print(f"Response (first 500 chars): {repr(response[:500])}")
         else:
             print(f"Response: {repr(response)}")
-        print("===================")
+        print("=" * (20 + len(source)))
+    
+    # If this is a user response, skip tool call parsing entirely
+    # User responses should be treated as conversational content, not tool calls
+    if source == "user":
+        response_text = response if isinstance(response, str) else json.dumps(response)
+        
+        # Clean user response from model tokens
+        tokens_to_strip = ['<|im_end|>', '<|endoftext|>', '<|im_start|>', '<eos>', '<bos>']
+        for token in tokens_to_strip:
+            response_text = response_text.replace(token, '')
+        response_text = response_text.strip()
+        
+        if os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"🧑 USER RESPONSE - Skipping tool call parsing, treating as conversational content")
+        return Action(
+            name=RESPOND_ACTION_NAME,
+            kwargs={RESPOND_ACTION_FIELD_NAME: response_text}
+        )
     
     # Handle dictionary input (e.g., OpenAI tool calls format)
     if isinstance(response, dict):
@@ -75,21 +139,26 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
         
         # Check if it's just a tool name
         response_clean = response.strip()
-        # print(f"DEBUG: Checking direct tool name: '{response_clean}' in {tool_names}")
         if response_clean in tool_names:
-            # print(f"DEBUG: Found direct tool name: {response_clean}")
-            return Action(name=response_clean, kwargs={})
+            try:
+                return Action(name=response_clean, kwargs={})
+            except Exception as e:
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"\n❌ DIRECT TOOL NAME ACTION CREATION FAILED:")
+                    print(f"   Tool: {response_clean}")
+                    print(f"   Error: {e}")
     
     # Fall back to respond action with the full text
     response_text = response if isinstance(response, str) else json.dumps(response)
     
-    # Log parsing failure details
-    import os
+    # Log parsing failure details with source context
     if os.environ.get("DEBUG_PARSER", "0") == "1":
-        print(f"\n=== PARSER FALLBACK ===")
+        print(f"\n=== PARSER FALLBACK ({source.upper()}) ===")
         print(f"Failed to parse tool call, falling back to respond action")
         print(f"Original response: {repr(response_text[:200])}")
-        print("=====================")
+        if source == "agent":
+            print("⚠️  Agent response didn't match any tool call pattern")
+        print("=" * (25 + len(source)))
     
     return Action(
         name=RESPOND_ACTION_NAME,
@@ -132,10 +201,24 @@ def _extract_openai_tool_calls(text: str, tool_names: set) -> Optional[Action]:
                             # If arguments can't be parsed, try as-is
                             kwargs = arguments_str if isinstance(arguments_str, dict) else {}
                         
-                        if os.environ.get("DEBUG_PARSER", "0") == "1":
-                            print(f"DEBUG: Parsed OpenAI tool call - tool: {tool_name}, args: {kwargs}")
+                        # Validate and sanitize kwargs before creating Action
+                        sanitized_kwargs = _validate_and_sanitize_kwargs(
+                            kwargs, tool_name, "OpenAI tool_calls format"
+                        )
                         
-                        return Action(name=tool_name, kwargs=kwargs)
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"DEBUG: Parsed OpenAI tool call - tool: {tool_name}, args: {sanitized_kwargs}")
+                        
+                        try:
+                            return Action(name=tool_name, kwargs=sanitized_kwargs)
+                        except Exception as e:
+                            # Log Action creation failure for debugging
+                            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                                print(f"\n❌ OPENAI ACTION CREATION FAILED:")
+                                print(f"   Tool: {tool_name}")
+                                print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                                print(f"   Error: {e}")
+                            break  # Exit this parsing attempt
                         
         except json.JSONDecodeError as e:
             if os.environ.get("DEBUG_PARSER", "0") == "1":
@@ -183,9 +266,21 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
                 # print(f"DEBUG _extract_direct_json: tool_name='{tool_name}', in tool_names: {tool_name in tool_names}")
                 
                 # Validate tool name
-                if isinstance(tool_name, str) and tool_name in tool_names: ## TODO: check if this is correct
-                    # print(f"DEBUG _extract_direct_json: SUCCESS! Returning action for {tool_name}")
-                    return Action(name=tool_name, kwargs=kwargs)
+                if isinstance(tool_name, str) and tool_name in tool_names:
+                    # Validate and sanitize kwargs before creating Action
+                    sanitized_kwargs = _validate_and_sanitize_kwargs(
+                        kwargs, tool_name, "Direct JSON format"
+                    )
+                    
+                    try:
+                        return Action(name=tool_name, kwargs=sanitized_kwargs)
+                    except Exception as e:
+                        # Log Action creation failure for debugging
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ DIRECT JSON ACTION CREATION FAILED:")
+                            print(f"   Tool: {tool_name}")
+                            print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                            print(f"   Error: {e}")
                 else:
                     # print(f"DEBUG _extract_direct_json: tool_name '{tool_name}' not in available tools")
                     pass
@@ -229,14 +324,22 @@ def _extract_json_tool_call(text: str, tool_names: set) -> Optional[Action]:
                 
                 # Validate tool name
                 if tool_name in tool_names:
-                    # Handle string arguments (need to parse again)
-                    if isinstance(kwargs, str):
-                        try:
-                            kwargs = json.loads(kwargs)
-                        except json.JSONDecodeError:
-                            continue
+                    # Validate and sanitize kwargs before creating Action
+                    sanitized_kwargs = _validate_and_sanitize_kwargs(
+                        kwargs, tool_name, f"JSON tool call extraction from {match[:100]}..."
+                    )
                     
-                    return Action(name=tool_name, kwargs=kwargs)
+                    try:
+                        return Action(name=tool_name, kwargs=sanitized_kwargs)
+                    except Exception as e:
+                        # Log Action creation failure for debugging
+                        import os
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ ACTION CREATION FAILED:")
+                            print(f"   Tool: {tool_name}")
+                            print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                            print(f"   Error: {e}")
+                        continue
                     
             except json.JSONDecodeError:
                 continue
@@ -266,13 +369,31 @@ def _extract_react_tool_call(text: str, tool_names: set) -> Optional[Action]:
                         kwargs = parsed.get("arguments", {})
                         
                         if tool_name in tool_names:
-                            return Action(name=tool_name, kwargs=kwargs)
+                            sanitized_kwargs = _validate_and_sanitize_kwargs(
+                                kwargs, tool_name, "ReAct JSON format"
+                            )
+                            try:
+                                return Action(name=tool_name, kwargs=sanitized_kwargs)
+                            except Exception as e:
+                                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                                    print(f"\n❌ REACT JSON ACTION CREATION FAILED:")
+                                    print(f"   Tool: {tool_name}")
+                                    print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                                    print(f"   Error: {e}")
+                                continue
                 except json.JSONDecodeError:
                     continue
             
             # Try to parse as simple tool name
             elif match in tool_names:
-                return Action(name=match, kwargs={})
+                try:
+                    return Action(name=match, kwargs={})
+                except Exception as e:
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"\n❌ REACT SIMPLE ACTION CREATION FAILED:")
+                        print(f"   Tool: {match}")
+                        print(f"   Error: {e}")
+                    continue
     
     return None
 
@@ -298,7 +419,17 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
                         arguments = {}
                 
                 if tool_name and tool_name in tool_names:
-                    return Action(name=tool_name, kwargs=arguments)
+                    sanitized_kwargs = _validate_and_sanitize_kwargs(
+                        arguments, tool_name, "Dict tool_calls format"
+                    )
+                    try:
+                        return Action(name=tool_name, kwargs=sanitized_kwargs)
+                    except Exception as e:
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ DICT TOOL_CALLS ACTION CREATION FAILED:")
+                            print(f"   Tool: {tool_name}")
+                            print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                            print(f"   Error: {e}")
     
     # Handle direct function format
     if "function" in response_dict:
@@ -313,7 +444,17 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
                 arguments = {}
         
         if tool_name and tool_name in tool_names:
-            return Action(name=tool_name, kwargs=arguments)
+            sanitized_kwargs = _validate_and_sanitize_kwargs(
+                arguments, tool_name, "Dict function format"
+            )
+            try:
+                return Action(name=tool_name, kwargs=sanitized_kwargs)
+            except Exception as e:
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"\n❌ DICT FUNCTION ACTION CREATION FAILED:")
+                    print(f"   Tool: {tool_name}")
+                    print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                    print(f"   Error: {e}")
     
     # Handle direct tool call format
     if "name" in response_dict and "arguments" in response_dict:
@@ -327,7 +468,17 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
                 arguments = {}
         
         if tool_name and tool_name in tool_names:
-            return Action(name=tool_name, kwargs=arguments)
+            sanitized_kwargs = _validate_and_sanitize_kwargs(
+                arguments, tool_name, "Dict direct format"
+            )
+            try:
+                return Action(name=tool_name, kwargs=sanitized_kwargs)
+            except Exception as e:
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"\n❌ DICT DIRECT ACTION CREATION FAILED:")
+                    print(f"   Tool: {tool_name}")
+                    print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                    print(f"   Error: {e}")
     
     return None
 
@@ -376,7 +527,18 @@ def _extract_function_call(text: str, tool_names: set, available_tools: List[Dic
                                             kwargs = {first_param: arg_values[0]}
                                             break
                     
-                    return Action(name=func_name, kwargs=kwargs)
+                    sanitized_kwargs = _validate_and_sanitize_kwargs(
+                        kwargs, func_name, "Function call format"
+                    )
+                    try:
+                        return Action(name=func_name, kwargs=sanitized_kwargs)
+                    except Exception as e:
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ FUNCTION CALL ACTION CREATION FAILED:")
+                            print(f"   Tool: {func_name}")
+                            print(f"   Sanitized kwargs: {sanitized_kwargs}")
+                            print(f"   Error: {e}")
+                        continue
     
     return None
 

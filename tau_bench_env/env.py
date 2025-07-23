@@ -268,8 +268,9 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         
         self.turns += 1
         
-        # Parse LLM response to tau_bench Action
-        parsed_action = parse_llm_response(action, self.tools_info)
+        # Parse agent's LLM response to tau_bench Action
+        # NOTE: Only agent responses should be parsed for tool calls
+        parsed_action = parse_llm_response(action, self.tools_info, source="agent")
         
         # Store agent action (except for respond actions)
         if parsed_action.name != RESPOND_ACTION_NAME:
@@ -278,7 +279,7 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # Execute action in tau_bench environment
         tau_result = self.tau_env.step(parsed_action)
         
-        # Update conversation history
+        # Update conversation history with agent's response
         self.conversation_history.append({"role": "assistant", "content": action})
         
         # Log complete conversation rollouts for observability
@@ -291,21 +292,23 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # Prepare observations for next turn
         observations = []
         if not done:
-            # Add tool result or user response to observations
+            # Handle the response from tau_bench environment
             if parsed_action.name != RESPOND_ACTION_NAME:
-                # Tool was used, add tool result
+                # Tool was used, tau_result.observation contains tool result
+                tool_result = self._clean_tool_result(tau_result.observation)
                 observations.append({
                     "role": "user", 
-                    "content": f"Tool result: {tau_result.observation}"
+                    "content": f"Tool result: {tool_result}"
                 })
             else:
-                # Regular response, add user's next message
+                # Agent made a conversational response, tau_result.observation contains user's next message
+                user_response = self._clean_user_response(tau_result.observation)
                 observations.append({
                     "role": "user",
-                    "content": tau_result.observation
+                    "content": user_response
                 })
             
-            # Update conversation history
+            # Update conversation history with the new observation
             self.conversation_history.extend(observations)
         
         # Calculate reward if conversation is done
@@ -394,3 +397,43 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         print(f"   Next obs length: {len(str(tau_result.observation))}")
         
         print(f"{'='*80}\n")
+    
+    def _clean_user_response(self, user_response: str) -> str:
+        """Clean user response from GPT-4o by removing model-specific tokens."""
+        if not isinstance(user_response, str):
+            return str(user_response)
+        
+        # Remove common model-specific tokens that might interfere
+        tokens_to_strip = [
+            '<|im_end|>', '<|endoftext|>', '<|im_start|>', 
+            '<eos>', '<bos>', '\x07', '\x00'
+        ]
+        
+        cleaned = user_response
+        for token in tokens_to_strip:
+            cleaned = cleaned.replace(token, '')
+        
+        # Clean up extra whitespace
+        cleaned = cleaned.strip()
+        
+        # Debug logging for user response cleaning
+        if os.environ.get("DEBUG_PARSER", "0") == "1" and cleaned != user_response:
+            print(f"\n🧹 CLEANED USER RESPONSE:")
+            print(f"   Original: {repr(user_response[:200])}")
+            print(f"   Cleaned:  {repr(cleaned[:200])}")
+        
+        return cleaned
+    
+    def _clean_tool_result(self, tool_result: str) -> str:
+        """Clean tool result by ensuring it's properly formatted."""
+        if not isinstance(tool_result, str):
+            return str(tool_result)
+        
+        # Tool results should generally be clean, but ensure no token contamination
+        cleaned = tool_result.strip()
+        
+        # Debug logging for tool results
+        if os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"\n🔧 TOOL RESULT: {repr(cleaned[:200])}{'...' if len(cleaned) > 200 else ''}")
+        
+        return cleaned
