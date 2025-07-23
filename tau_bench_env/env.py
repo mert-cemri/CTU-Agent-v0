@@ -197,7 +197,40 @@ class TauBenchEnv(BaseTextEnv):
             except Exception as e:
                 print(f"ERROR: Exception processing message {i}: {e}")
         
-        # Create comprehensive system prompt
+        # Create comprehensive system prompt with few-shot examples
+        # Get first two tools for examples (if available)
+        example_tools = self.tools_info[:2] if len(self.tools_info) >= 2 else self.tools_info
+        
+        few_shot_examples = ""
+        if len(example_tools) > 0:
+            tool1 = example_tools[0]["function"]
+            tool1_params = list(tool1["parameters"]["properties"].keys())
+            param1 = tool1_params[0] if tool1_params else "param"
+            
+            few_shot_examples = f"""
+
+EXAMPLES OF CORRECT TOOL USAGE:
+
+Example 1 - Using a tool:
+User: Can you check the details for user123?
+Assistant: {{"name": "{tool1['name']}", "arguments": {{"{param1}": "user123"}}}}
+
+Example 2 - Regular response (no tool needed):
+User: Thank you for your help!
+Assistant: You're welcome! Is there anything else I can help you with today?
+"""
+            
+            if len(example_tools) > 1:
+                tool2 = example_tools[1]["function"]
+                tool2_params = list(tool2["parameters"]["properties"].keys())
+                param2 = tool2_params[0] if tool2_params else "param"
+                
+                few_shot_examples += f"""
+Example 3 - Using another tool:
+User: What information do you have about item456?
+Assistant: {{"name": "{tool2['name']}", "arguments": {{"{param2}": "item456"}}}}
+"""
+        
         domain_context = f"""
 You are a helpful assistant for {self.domain} customer service. You have access to various tools to help customers.
 
@@ -211,6 +244,7 @@ IMPORTANT INSTRUCTIONS:
 - Do NOT use markdown code blocks
 - For regular conversation (no tools needed), respond naturally
 - Always be helpful and professional
+{few_shot_examples}
 """
         
         # Combine with original system content

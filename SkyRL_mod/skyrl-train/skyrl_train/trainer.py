@@ -667,6 +667,22 @@ class RayPPOTrainer:
         """
         generator_output: GeneratorOutput = await self.generator.generate(input_batch)
 
+        # Log example generations for observability
+        if self.global_step % 50 == 0:  # Log every 50 steps
+            logger.info(f"\n=== GENERATION EXAMPLES (Step {self.global_step}) ===")
+            # Show up to 3 examples
+            for i in range(min(3, len(generator_output["response_ids"]))):
+                prompt = input_batch["prompts"][i]
+                response_ids = generator_output["response_ids"][i]
+                response_text = self.tokenizer.decode(response_ids, skip_special_tokens=True)
+                reward = generator_output["rewards"][i] if "rewards" in generator_output else "N/A"
+                
+                logger.info(f"\nExample {i+1}:")
+                logger.info(f"Prompt (last 200 chars): ...{prompt[-200:]}")
+                logger.info(f"Response: {response_text[:500]}{'...' if len(response_text) > 500 else ''}")
+                logger.info(f"Reward: {reward}")
+            logger.info("=" * 50)
+
         # add rollout metrics to self.all_metrics
         if generator_output["rollout_metrics"] is not None:
             self.all_metrics.update(generator_output["rollout_metrics"])
@@ -722,7 +738,21 @@ class RayPPOTrainer:
         if hasattr(self, 'tracker') and self.tracker is not None:
             # wandb.step should correspond to trainer global_step
             try:
+                # Log both at current step and with a more granular counter
                 self.tracker.log(reward_metrics, step=self.global_step)
+                
+                # Also log with a batch counter for more granular tracking
+                if not hasattr(self, 'batch_counter'):
+                    self.batch_counter = 0
+                self.batch_counter += 1
+                
+                batch_metrics = {
+                    f"batch_reward/avg_pass_at_{n_samples_per_prompt}": pass_at_n,
+                    "batch_reward/avg_raw_reward": mean_raw_reward,
+                    "batch_reward/parse_failure_rate": parse_failure_rate,
+                    "batch_reward/batch_number": self.batch_counter,
+                }
+                self.tracker.log(batch_metrics)
             except Exception as e:
                 logger.warning(f"Early reward logging failed: {e}")
 

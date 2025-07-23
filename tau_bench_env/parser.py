@@ -18,10 +18,17 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
 
     tool_names = [tool["function"]["name"] for tool in tools_info]
     
-    # Debug print
-    # print(f"DEBUG: tool_names = {tool_names}")
-    # print(f"DEBUG: response type = {type(response)}")
-    # print(f"DEBUG: response = {repr(response)}")
+    # Enhanced debug logging
+    import os
+    if os.environ.get("DEBUG_PARSER", "0") == "1":
+        print(f"\n=== PARSER DEBUG ===")
+        print(f"Available tools: {tool_names}")
+        print(f"Response type: {type(response)}")
+        if isinstance(response, str):
+            print(f"Response (first 500 chars): {repr(response[:500])}")
+        else:
+            print(f"Response: {repr(response)}")
+        print("===================")
     
     # Handle dictionary input (e.g., OpenAI tool calls format)
     if isinstance(response, dict):
@@ -66,7 +73,15 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
     
     # Fall back to respond action with the full text
     response_text = response if isinstance(response, str) else json.dumps(response)
-    # print(f"DEBUG: Falling back to respond action")
+    
+    # Log parsing failure details
+    import os
+    if os.environ.get("DEBUG_PARSER", "0") == "1":
+        print(f"\n=== PARSER FALLBACK ===")
+        print(f"Failed to parse tool call, falling back to respond action")
+        print(f"Original response: {repr(response_text[:200])}")
+        print("=====================")
+    
     return Action(
         name=RESPOND_ACTION_NAME,
         kwargs={RESPOND_ACTION_FIELD_NAME: response_text.strip()}
