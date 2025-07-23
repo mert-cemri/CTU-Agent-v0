@@ -27,6 +27,7 @@ mkdir -p $CKPT_DIR
 # # Environment variables
 export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
+export DEBUG_PARSER=1
 
 # Ray environment variable for UV support
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
