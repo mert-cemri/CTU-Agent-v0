@@ -6,7 +6,7 @@
 # conda activate ctu
 
 # Tau Bench Training Script
-# Train Qwen3-8B on tau_bench multi-domain conversational AI tasks
+# Train Qwen2.5-3B-Instruct on tau_bench multi-domain conversational AI tasks
 
 # Configuration
 DATA_DIR="data/tau_bench_retail"
@@ -16,9 +16,9 @@ NUM_INFERENCE_ENGINES=2
 TENSOR_PARALLEL_SIZE=4
 EPOCHS=5
 
-# Model Configuration - Upgraded to more powerful 8B model
-POLICY_MODEL="Qwen/Qwen3-8B"
-REF_MODEL="Qwen/Qwen3-8B"
+# Model Configuration - Upgraded to more powerful 3B model
+POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
+REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
 
 # Make sure required directories exist
 mkdir -p $DATA_DIR
@@ -55,12 +55,12 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.export_path="$HOME/exports/tau_bench" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=128 \
-  trainer.policy_mini_batch_size=32 \
+  trainer.train_batch_size=256 \
+  trainer.policy_mini_batch_size=64 \
   trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.micro_forward_batch_size_per_gpu=2 \
   trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=64 \
+  trainer.eval_batch_size=128 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
@@ -73,7 +73,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=3 \
-  generator.gpu_memory_utilization=0.8 \
+  generator.gpu_memory_utilization=0.7 \
   generator.max_input_length=16384 \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.7 \
@@ -87,7 +87,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.max_env_workers=16 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \
-  trainer.run_name="tau_bench_qwen3_8b_$(date +%Y%m%d_%H%M%S)" \
+  trainer.run_name="tau_bench_qwen2_5_3b_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   $@
 

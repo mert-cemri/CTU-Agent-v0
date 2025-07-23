@@ -11,25 +11,25 @@ def check_file_for_model(filepath, filename):
         with open(filepath, 'r') as f:
             content = f.read()
         
-        has_qwen3_8b = "Qwen/Qwen3-8B" in content or "Qwen3-8B" in content
+        has_qwen2_5_3b = "Qwen/Qwen2.5-3B-Instruct" in content or "qwen2_5_3b" in content
         has_old_model = "Qwen2.5-1.5B" in content or "qwen1_5b" in content
         
         print(f"\n📁 {filename}:")
-        if has_qwen3_8b:
-            print("  ✅ Contains Qwen3-8B references")
+        if has_qwen2_5_3b:
+            print("  ✅ Contains Qwen2.5-3B-Instruct references")
         if has_old_model:
             print("  ⚠️  Still contains old model references")
-        if not has_qwen3_8b and not has_old_model:
+        if not has_qwen2_5_3b and not has_old_model:
             print("  ℹ️  No model references found")
             
-        return has_qwen3_8b, has_old_model
+        return has_qwen2_5_3b, has_old_model
         
     except Exception as e:
         print(f"  ❌ Error reading {filename}: {e}")
         return False, False
 
 def main():
-    print("🔍 VERIFYING QWEN3-8B MODEL UPDATE")
+    print("🔍 VERIFYING QWEN2.5-3B-INSTRUCT MODEL UPDATE")
     print("=" * 50)
     
     files_to_check = [
@@ -77,15 +77,16 @@ def main():
 When you run training, you should now see:
   policy:
     model:
-      path: Qwen/Qwen3-8B
+      path: Qwen/Qwen2.5-3B-Instruct
   ref:
     model:
-      path: Qwen/Qwen3-8B
+      path: Qwen/Qwen2.5-3B-Instruct
 
-Key changes for the 8B model:
-✅ Reduced batch sizes for memory efficiency
-✅ Increased GPU memory utilization to 0.8
-✅ Updated run names to include "qwen3_8b"
+Key changes for the 3B model:
+✅ 2x more parameters than 1.5B model
+✅ Compatible with VLLM inference engine
+✅ Updated run names to include "qwen2_5_3b"
+✅ Optimized batch sizes for 3B model
 
 The larger model should provide:
 🧠 Better instruction following

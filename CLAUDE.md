@@ -22,7 +22,7 @@ CTU-Agent-v0 is a sophisticated reinforcement learning system that trains langua
 
 - **tau_bench**: A multi-domain conversational AI benchmark with tool-use capabilities
 - **SkyRL-Train**: A distributed RL training framework from Sky Computing Lab
-- **Policy Model**: Qwen/Qwen3-8B (being trained)
+- **Policy Model**: Qwen/Qwen2.5-3B-Instruct (being trained)
 - **User Simulation**: GPT-4o for realistic user behavior
 
 **Primary Objective**: Train language models to correctly use tools across multiple domains (airline, healthcare, telecom, doordash, retail) through reinforcement learning, achieving high task completion rates.
@@ -228,7 +228,7 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 **training/configs/tau_bench_config.yaml**:
 ```yaml
-model_name_or_path: Qwen/Qwen3-8B
+model_name_or_path: Qwen/Qwen2.5-3B-Instruct
 trainer:
   epochs: 50
   train_batch_size: 256
