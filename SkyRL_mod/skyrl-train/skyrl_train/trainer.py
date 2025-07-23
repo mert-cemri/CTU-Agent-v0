@@ -708,12 +708,23 @@ class RayPPOTrainer:
 
         n_samples_per_prompt = self.cfg.generator.n_samples_per_prompt
 
+        # Calculate parse failure rate (assuming 0 reward means failure)
+        parse_failures = sum(1 for r in rewards if r == 0)
+        parse_failure_rate = parse_failures / len(rewards) if rewards else 0
+
         reward_metrics = {
             f"reward/avg_pass_at_{n_samples_per_prompt}": pass_at_n,
             "reward/avg_raw_reward": mean_raw_reward,
+            "reward/parse_failure_rate": parse_failure_rate,
         }
         self.all_metrics.update(reward_metrics)
-        logger.info(f"reward/avg_pass_at_{n_samples_per_prompt}: {pass_at_n}, reward/avg_raw_reward: {mean_raw_reward}")
+        # Log rewards immediately so they are not lost if later stages fail
+        if hasattr(self, 'tracker') and self.tracker is not None:
+            # wandb.step should correspond to trainer global_step
+            try:
+                self.tracker.log(reward_metrics, step=self.global_step)
+            except Exception as e:
+                logger.warning(f"Early reward logging failed: {e}")
 
         # re-assign reward but now it's per token rewards
         generator_output["rewards"] = per_token_rewards
@@ -804,6 +815,16 @@ class RayPPOTrainer:
                 "loss/avg_raw_advantages_abs": avg_advantages_abs,
             }
         )
+        # Early flush of loss/advantage metrics
+        if hasattr(self, 'tracker') and self.tracker is not None:
+            try:
+                self.tracker.log({
+                    "loss/avg_raw_rewards": avg_rewards,
+                    "loss/avg_raw_advantages": avg_advantages,
+                    "loss/avg_raw_advantages_abs": avg_advantages_abs,
+                }, step=self.global_step)
+            except Exception as e:
+                logger.warning(f"Early loss logging failed: {e}")
         return data
 
     def dump_data(self, data: TrainingInputBatch, file_name: str):
@@ -1035,6 +1056,13 @@ class RayPPOTrainer:
             self.all_metrics.update({f"policy/{k}": v})
         empty_cache_refs += self.policy_model.async_run_ray_method("pass_through", "empty_cache")
         ray.get(empty_cache_refs)
+
+        # Early flush of policy / critic metrics so they appear even if later code fails
+        if hasattr(self, 'tracker') and self.tracker is not None:
+            try:
+                self.tracker.log(self.all_metrics, step=self.global_step)
+            except Exception as e:
+                logger.warning(f"Early policy/critic logging failed: {e}")
 
         return policy_status
 

@@ -111,7 +111,7 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
                 # print(f"DEBUG _extract_direct_json: tool_name='{tool_name}', in tool_names: {tool_name in tool_names}")
                 
                 # Validate tool name
-                if tool_name in tool_names:
+                if isinstance(tool_name, str) and tool_name in tool_names: ## TODO: check if this is correct
                     # print(f"DEBUG _extract_direct_json: SUCCESS! Returning action for {tool_name}")
                     return Action(name=tool_name, kwargs=kwargs)
                 else:

@@ -169,11 +169,11 @@ class TauBenchEnv(BaseTextEnv):
         
         # Handle the case where original_prompt is a string instead of a list
         if isinstance(original_prompt, str):
-            print("INFO: original_prompt is a string, parsing as JSON...")
+            # print("INFO: original_prompt is a string, parsing as JSON...")
             try:
                 import json
                 original_prompt = json.loads(original_prompt)
-                print("SUCCESS: Parsed original_prompt as JSON")
+                # print("SUCCESS: Parsed original_prompt as JSON")
             except json.JSONDecodeError as e:
                 print(f"ERROR: Could not parse original_prompt as JSON: {e}")
                 # Create a default prompt structure
