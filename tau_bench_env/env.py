@@ -11,6 +11,7 @@ from tau_bench.tau_types import Action, Task, RESPOND_ACTION_NAME, RESPOND_ACTIO
 from tau_bench.envs.user import UserStrategy
 
 from .parser import parse_llm_response, format_tool_info_for_llm
+from .simple_parser import parse_tool_calling_response
 
 
 class TauBenchEnv(BaseTextEnv):
@@ -19,6 +20,17 @@ class TauBenchEnv(BaseTextEnv):
     Supports all 5 domains: airline, healthcare, telecom, doordash, retail.
     """
 
+    def _convert_tools_to_openai_format(self) -> List[Dict[str, Any]]:
+        """Convert tau_bench tools info to OpenAI tools format."""
+        openai_tools = []
+        for tool in self.tools_info:
+            openai_tool = {
+                "type": "function",
+                "function": tool["function"]
+            }
+            openai_tools.append(openai_tool)
+        return openai_tools
+    
     def __init__(self, env_config: DictConfig, extras: Dict[str, Any] = {}):
         super().__init__()
         
@@ -55,6 +67,9 @@ class TauBenchEnv(BaseTextEnv):
         self.user_strategy = env_config.get("user_strategy", "llm")
         self.user_model = env_config.get("user_model", "gpt-4o")
         self.user_provider = env_config.get("user_provider", "openai")
+        
+        # Tool calling configuration
+        self.use_native_tool_calling = env_config.get("use_native_tool_calling", False)
         
         # Check if we have API keys for LLM user simulation
         if self.user_strategy == "llm" and self.user_provider == "openai":
@@ -160,12 +175,18 @@ class TauBenchEnv(BaseTextEnv):
         
         self.task_initialized = True
         
-        return enhanced_prompt, {
+        metadata = {
             "domain": self.domain,
             "instruction": self.instruction,
             "tools_available": len(self.tools_info),
             "initial_user_message": initial_user_message
         }
+        
+        # Add tools in OpenAI format if native tool calling is enabled
+        if self.use_native_tool_calling:
+            metadata["tools"] = self._convert_tools_to_openai_format()
+        
+        return enhanced_prompt, metadata
     
     def _create_enhanced_prompt(self, original_prompt: ConversationType, user_message: str) -> ConversationType:
         """Create enhanced prompt with domain-specific context and tool information."""
@@ -277,7 +298,13 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         self.turns += 1
         
         # Parse agent's LLM response to tau_bench Action
-        parsed_action = parse_llm_response(action, self.tools_info, source="agent")
+        if self.use_native_tool_calling:
+            # Use simple parser for structured tool calling responses
+            parsed_action = parse_tool_calling_response(action, source="agent")
+        else:
+            # Use complex parser for text-based responses
+            parsed_action = parse_llm_response(action, self.tools_info, source="agent")
+        
         assert hasattr(parsed_action, 'name') and hasattr(parsed_action, 'kwargs'), \
             f"Invalid parsed_action: {parsed_action}"
         
@@ -324,7 +351,8 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
             # Assert observation structure
             assert len(observations) == 1, f"Expected 1 observation, got {len(observations)}"
             assert observations[0]["role"] in ["tool", "user"], f"Invalid role: {observations[0]['role']}"
-            assert len(observations[0]["content"]) > 0, "Empty observation content"
+            assert "content" in observations[0], "Observation missing content field"
+            # Note: Empty content is valid (e.g., think tool can return empty string)
             
             # Update conversation history with the new observation
             assert all("role" in obs and "content" in obs for obs in observations), \

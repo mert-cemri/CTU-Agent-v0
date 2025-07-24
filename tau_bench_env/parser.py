@@ -24,6 +24,18 @@ def _validate_and_sanitize_kwargs(kwargs: Any, tool_name: str, debug_context: st
     if isinstance(kwargs, dict):
         return kwargs
     
+    # Handle JSON string arguments (common in OpenAI format)
+    if isinstance(kwargs, str):
+        try:
+            # Try to parse as JSON
+            parsed = json.loads(kwargs)
+            if isinstance(parsed, dict):
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   ✅ Successfully parsed JSON arguments for {tool_name}")
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    
     # Log the problematic case for debugging
     if os.environ.get("DEBUG_PARSER", "0") == "1":
         print(f"\n⚠️  KWARGS VALIDATION WARNING:")
@@ -31,17 +43,7 @@ def _validate_and_sanitize_kwargs(kwargs: Any, tool_name: str, debug_context: st
         print(f"   Context: {debug_context}")
         print(f"   Expected: dict, Got: {type(kwargs).__name__}")
         print(f"   Value: {repr(kwargs)}")
-        print(f"   Converting to empty dict to prevent crash")
-    
-    # Handle common cases where we can salvage something useful
-    if isinstance(kwargs, str):
-        try:
-            # Try to parse as JSON
-            parsed = json.loads(kwargs)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
+        print(f"   Falling back to empty dict")
     
     # Fallback: return empty dict to prevent ValidationError
     return {}
@@ -188,6 +190,10 @@ def _extract_openai_tool_calls(text: str, tool_names: set) -> Optional[Action]:
     
     # Check if it looks like a tool_calls JSON object
     if text.startswith('{') and 'tool_calls' in text:
+        # Skip obviously malformed JSON
+        if text.count('{') != text.count('}') or text.count('"') % 2 != 0:
+            return None
+            
         try:
             parsed = json.loads(text)
             
@@ -265,6 +271,10 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
     
     # Check if the entire text is a JSON object
     if text.startswith('{') and text.endswith('}'):
+        # Skip obviously malformed JSON
+        if text.count('{') != text.count('}') or text.count('"') % 2 != 0:
+            return None
+            
         try:
             parsed = json.loads(text)
             # print(f"DEBUG _extract_direct_json: parsed JSON: {parsed}")
@@ -326,6 +336,10 @@ def _extract_json_tool_call(text: str, tool_names: set) -> Optional[Action]:
     
     # Process all matches
     for match in matches:
+            # Skip obviously malformed JSON patterns
+            if len(match) < 10 or match.count('{') != match.count('}') or match.count('"') % 2 != 0:
+                continue
+                
             try:
                 parsed = json.loads(match)
                 

@@ -11,6 +11,9 @@ class InferenceEngineInput(TypedDict):
     prompt_token_ids: Optional[List[List[int]]]
     sampling_params: Optional[Dict[str, Any]]
     trajectory_ids: Optional[List[Hashable]]
+    # Tool calling support
+    tools: Optional[List[Dict[str, Any]]]
+    use_native_tool_calling: Optional[bool]
 
 
 class InferenceEngineOutput(TypedDict):

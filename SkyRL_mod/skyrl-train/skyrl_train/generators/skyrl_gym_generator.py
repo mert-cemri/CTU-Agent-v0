@@ -37,6 +37,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         self.max_turns = generator_cfg.max_turns
         self.batched = generator_cfg.batched
         self.use_conversation_multi_turn = generator_cfg.use_conversation_multi_turn
+        self.use_native_tool_calling = getattr(generator_cfg, 'use_native_tool_calling', False)
 
         # optionally use custom chat template to get loss masks (i.e. for Qwen3)
         self.custom_chat_template = get_custom_chat_template(model_name)
@@ -88,7 +89,12 @@ class SkyRLGymGenerator(GeneratorInterface):
         chat_end_index = len(chat_history)
 
         # Init() returns the first prompt to be given to the model, and optional metadata dict
-        chat_history, _ = env.init(chat_history)
+        chat_history, metadata = env.init(chat_history)
+        
+        # Extract tools from metadata if native tool calling is enabled
+        tools = None
+        if self.use_native_tool_calling and metadata and "tools" in metadata:
+            tools = metadata["tools"]
         input_ids = self.tokenizer.apply_chat_template(
             chat_history,
             # if we are keeping the chat history in token ids, we have to add the generation prompt to the original prompt
@@ -102,11 +108,19 @@ class SkyRLGymGenerator(GeneratorInterface):
         while not done:
             if self.use_conversation_multi_turn:
                 engine_input = InferenceEngineInput(
-                    prompts=[chat_history], trajectory_ids=[trajectory_id], sampling_params=sampling_params
+                    prompts=[chat_history], 
+                    trajectory_ids=[trajectory_id], 
+                    sampling_params=sampling_params,
+                    tools=tools if self.use_native_tool_calling else None,
+                    use_native_tool_calling=self.use_native_tool_calling
                 )
             else:
                 engine_input = InferenceEngineInput(
-                    prompt_token_ids=[input_ids], trajectory_ids=[trajectory_id], sampling_params=sampling_params
+                    prompt_token_ids=[input_ids], 
+                    trajectory_ids=[trajectory_id], 
+                    sampling_params=sampling_params,
+                    tools=tools if self.use_native_tool_calling else None,
+                    use_native_tool_calling=self.use_native_tool_calling
                 )
             engine_output = await self.inference_engine_client.generate(engine_input)
             output = engine_output["responses"][0]
@@ -195,15 +209,31 @@ class SkyRLGymGenerator(GeneratorInterface):
         """
         envs = []
         init_prompts = []
+        all_tools = []
         for env_class, env_extra, prompt in zip(env_classes, env_extras, prompts):
             env_extra["max_turns"] = self.max_turns
             env_config = self.skyrl_gym_cfg.get(env_class, DictConfig({}))
             env = skyrl_gym.make(env_class, env_config=env_config, extras=env_extra)
-            init_prompt, _ = env.init(prompt)
+            init_prompt, metadata = env.init(prompt)
             init_prompts.append(init_prompt)
             envs.append(env)
+            
+            # Extract tools for this environment if native tool calling is enabled
+            if self.use_native_tool_calling and metadata and "tools" in metadata:
+                all_tools.append(metadata["tools"])
+            else:
+                all_tools.append(None)
 
-        engine_input = InferenceEngineInput(prompts=init_prompts, sampling_params=sampling_params)
+        # For batched generation, we need to handle cases where some envs have tools and others don't
+        # For simplicity, use tools from first environment or None if not consistent
+        tools = all_tools[0] if self.use_native_tool_calling and all(t == all_tools[0] for t in all_tools) else None
+        
+        engine_input = InferenceEngineInput(
+            prompts=init_prompts, 
+            sampling_params=sampling_params,
+            tools=tools,
+            use_native_tool_calling=self.use_native_tool_calling
+        )
         engine_output = await self.inference_engine_client.generate(engine_input)
         responses = engine_output["responses"]
         stop_reasons = engine_output["stop_reasons"]

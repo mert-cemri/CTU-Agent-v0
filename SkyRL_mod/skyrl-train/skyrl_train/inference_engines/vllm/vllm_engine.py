@@ -161,6 +161,8 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
         prompts = input_batch.get("prompts")
         prompt_token_ids = input_batch.get("prompt_token_ids")
         request_sampling_params = input_batch.get("sampling_params")
+        tools = input_batch.get("tools")
+        use_native_tool_calling = input_batch.get("use_native_tool_calling", False)
 
         if (prompts is None and prompt_token_ids is None) or (prompts is not None and prompt_token_ids is not None):
             raise ValueError("Either `prompts` or `prompt_token_ids` must be provided, but not both.")
@@ -168,6 +170,10 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
         sampling_params = (
             SamplingParams(**request_sampling_params) if request_sampling_params is not None else self.sampling_params
         )
+
+        # If using native tool calling, return the prompts as-is for chat() method
+        if use_native_tool_calling and prompts is not None:
+            return prompts, sampling_params, tools, use_native_tool_calling
 
         if prompt_token_ids is None:
             prompt_token_ids = self.tokenizer.apply_chat_template(
@@ -178,10 +184,10 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
                 tokenize=True,
             )["input_ids"]
 
-        return prompt_token_ids, sampling_params
+        return prompt_token_ids, sampling_params, tools, use_native_tool_calling
 
     def _postprocess_outputs(self, outputs):
-        """Common output processing logic."""
+        """Common output processing logic for both generate() and chat() methods."""
         responses: List[str] = []
         stop_reasons: List[str] = []
         for output in outputs:
@@ -214,13 +220,28 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
         return vllm.LLM(*args, **kwargs)
 
     async def generate(self, input_batch: InferenceEngineInput) -> InferenceEngineOutput:
-        prompt_token_ids, sampling_params = self._preprocess_prompts(input_batch)
+        prompts_or_token_ids, sampling_params, tools, use_native_tool_calling = self._preprocess_prompts(input_batch)
 
-        outputs = await asyncio.to_thread(
-            self.llm.generate,
-            prompts=[TokensPrompt(prompt_token_ids=r) for r in prompt_token_ids],
-            sampling_params=sampling_params,
-        )
+        if use_native_tool_calling:
+            # Use chat() method with tools - prompts_or_token_ids is a list of conversations
+            outputs = []
+            for conversation in prompts_or_token_ids:
+                output = await asyncio.to_thread(
+                    self.llm.chat,
+                    messages=conversation,
+                    sampling_params=sampling_params,
+                    tools=tools,
+                    add_generation_prompt=True,
+                    use_tqdm=False
+                )
+                outputs.extend(output)  # chat() returns list[RequestOutput]
+        else:
+            # Use traditional generate() method
+            outputs = await asyncio.to_thread(
+                self.llm.generate,
+                prompts=[TokensPrompt(prompt_token_ids=r) for r in prompts_or_token_ids],
+                sampling_params=sampling_params,
+            )
 
         return self._postprocess_outputs(outputs)
 
@@ -292,16 +313,31 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
 
     async def generate(self, input_batch: InferenceEngineInput) -> InferenceEngineOutput:
         """Generate responses using vLLM's async engine."""
-        prompt_token_ids, sampling_params = self._preprocess_prompts(input_batch)
+        prompts_or_token_ids, sampling_params, tools, use_native_tool_calling = self._preprocess_prompts(input_batch)
 
-        tasks = []
-        for prompt in prompt_token_ids:
-            # Schedule the collection of outputs for each prompt.
-            # Avoid duplicate request_ids
-            request_id = str(uuid4().hex)
-            task = asyncio.create_task(self._collect_outputs(prompt, request_id, sampling_params))
-            tasks.append(task)
-        outputs = await asyncio.gather(*tasks)
+        if use_native_tool_calling:
+            # Use chat() method with tools for async engine
+            outputs = []
+            for conversation in prompts_or_token_ids:
+                # For async engine, we need to use the async chat method
+                output = await self.llm.chat(
+                    messages=conversation,
+                    sampling_params=sampling_params,
+                    tools=tools,
+                    add_generation_prompt=True,
+                    use_tqdm=False
+                )
+                outputs.extend(output)  # chat() returns list[RequestOutput]
+        else:
+            # Use traditional generate() method
+            tasks = []
+            for prompt in prompts_or_token_ids:
+                # Schedule the collection of outputs for each prompt.
+                # Avoid duplicate request_ids
+                request_id = str(uuid4().hex)
+                task = asyncio.create_task(self._collect_outputs(prompt, request_id, sampling_params))
+                tasks.append(task)
+            outputs = await asyncio.gather(*tasks)
 
         return self._postprocess_outputs(outputs)
 
