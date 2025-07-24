@@ -307,17 +307,25 @@ def _extract_direct_json(text: str, tool_names: set) -> Optional[Action]:
 
 def _extract_json_tool_call(text: str, tool_names: set) -> Optional[Action]:
     """Extract JSON-formatted tool calls from text."""
-    # Look for JSON-like patterns
-    json_patterns = [
-        r'```json\s*(\{[^`]+\})\s*```',  # JSON in code blocks
-        r'```\s*(\{[^`]+\})\s*```',      # JSON in code blocks without language
-        r'(\{[^{}]*"name"\s*:[^{}]*"arguments"\s*:[^{}]*\})',  # Tool call structure
-        r'(\{[^{}]*"function"\s*:[^{}]*\})',  # Function call structure
+    # Look for JSON objects by finding balanced braces
+    import re
+    
+    # Find all potential JSON objects (balanced braces)
+    brace_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+    matches = re.findall(brace_pattern, text, re.DOTALL)
+    
+    # Also try code block patterns
+    code_patterns = [
+        r'```json\s*(\{.*?\})\s*```',  # JSON in code blocks
+        r'```\s*(\{.*?\})\s*```',      # JSON in code blocks without language
     ]
     
-    for pattern in json_patterns:
-        matches = re.findall(pattern, text, re.DOTALL)
-        for match in matches:
+    for pattern in code_patterns:
+        code_matches = re.findall(pattern, text, re.DOTALL)
+        matches.extend(code_matches)
+    
+    # Process all matches
+    for match in matches:
             try:
                 parsed = json.loads(match)
                 
