@@ -57,7 +57,6 @@ class TauBenchEnv(BaseTextEnv):
         self.user_provider = env_config.get("user_provider", "openai")
         
         # Check if we have API keys for LLM user simulation
-        import os
         if self.user_strategy == "llm" and self.user_provider == "openai":
             if not os.environ.get("OPENAI_API_KEY"):
                 print("Warning: OPENAI_API_KEY not set in this environment")
@@ -71,7 +70,9 @@ class TauBenchEnv(BaseTextEnv):
         
         # Initialize tau_bench environment
         self.tau_env = self._create_tau_env()
+        assert self.tau_env is not None, "Failed to create tau_bench environment"
         self.tools_info = self.tau_env.tools_info
+        assert len(self.tools_info) > 0, f"No tools available for domain {self.domain}"
         
         # Environment state
         self.task_initialized = False
@@ -140,14 +141,21 @@ class TauBenchEnv(BaseTextEnv):
         
         # Reset tau_bench environment
         env_reset_response = self.tau_env.reset(task_index=0)
+        assert hasattr(env_reset_response, 'observation'), \
+            f"Invalid reset response: {env_reset_response}"
         
         # Store initial user message
         initial_user_message = env_reset_response.observation
+        assert isinstance(initial_user_message, str) and len(initial_user_message) > 0, \
+            "Empty or invalid initial user message"
         
         # Create enhanced prompt with domain context and tool information
         enhanced_prompt = self._create_enhanced_prompt(prompt, initial_user_message)
         
         # Store in conversation history
+        assert len(enhanced_prompt) >= 2, "Enhanced prompt must have system and user messages"
+        assert enhanced_prompt[0]["role"] == "system", "First message must be system"
+        assert enhanced_prompt[1]["role"] == "user", "Second message must be user"
         self.conversation_history.extend(enhanced_prompt)
         
         self.task_initialized = True
@@ -269,8 +277,9 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         self.turns += 1
         
         # Parse agent's LLM response to tau_bench Action
-        # NOTE: Only agent responses should be parsed for tool calls
         parsed_action = parse_llm_response(action, self.tools_info, source="agent")
+        assert hasattr(parsed_action, 'name') and hasattr(parsed_action, 'kwargs'), \
+            f"Invalid parsed_action: {parsed_action}"
         
         # Store agent action (except for respond actions)
         if parsed_action.name != RESPOND_ACTION_NAME:
@@ -278,9 +287,13 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         
         # Execute action in tau_bench environment
         tau_result = self.tau_env.step(parsed_action)
+        assert hasattr(tau_result, 'observation') and hasattr(tau_result, 'done'), \
+            f"Invalid tau_result structure: {tau_result}"
         
         # Update conversation history with agent's response
-        self.conversation_history.append({"role": "assistant", "content": action})
+        agent_message = {"role": "assistant", "content": action}
+        assert isinstance(action, str) and len(action) > 0, "Agent action must be non-empty string"
+        self.conversation_history.append(agent_message)
         
         # Log complete conversation rollouts for observability
         if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
@@ -297,8 +310,8 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                 # Tool was used, tau_result.observation contains tool result
                 tool_result = self._clean_tool_result(tau_result.observation)
                 observations.append({
-                    "role": "user", 
-                    "content": f"Tool result: {tool_result}"
+                    "role": "tool", 
+                    "content": tool_result
                 })
             else:
                 # Agent made a conversational response, tau_result.observation contains user's next message
@@ -308,8 +321,21 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                     "content": user_response
                 })
             
+            # Assert observation structure
+            assert len(observations) == 1, f"Expected 1 observation, got {len(observations)}"
+            assert observations[0]["role"] in ["tool", "user"], f"Invalid role: {observations[0]['role']}"
+            assert len(observations[0]["content"]) > 0, "Empty observation content"
+            
             # Update conversation history with the new observation
+            assert all("role" in obs and "content" in obs for obs in observations), \
+                "All observations must have role and content"
             self.conversation_history.extend(observations)
+            
+            # Assert conversation consistency
+            assert len(self.conversation_history) >= 2, "Conversation must have at least system+user messages"
+            assert self.conversation_history[0]["role"] == "system", "First message must be system"
+            assert self.conversation_history[-1]["role"] in ["user", "tool"], \
+                f"Last message role must be user or tool, got: {self.conversation_history[-1]['role']}"
         
         # Calculate reward if conversation is done
         reward = tau_result.reward if done else 0.0
@@ -366,7 +392,6 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                 print(f"\n🤖 ASSISTANT:")
                 # Try to parse if it's a tool call
                 try:
-                    import json
                     if content.strip().startswith('{') and 'tool_calls' in content:
                         parsed = json.loads(content.strip())
                         if 'tool_calls' in parsed:

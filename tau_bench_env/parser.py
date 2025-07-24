@@ -56,6 +56,10 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
         tools_info: Available tools information
         source: Source of response ("agent", "user", or "unknown")
     """
+    assert isinstance(tools_info, list) and len(tools_info) > 0, "tools_info must be non-empty list"
+    assert all("function" in tool and "name" in tool["function"] for tool in tools_info), \
+        "Invalid tools_info structure"
+    
     # Pre-process a dict response to handle nested tool_name
     if isinstance(response, dict):
         if "tool_name" in response and isinstance(response["tool_name"], dict):
@@ -160,10 +164,17 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], tools_info: List[Di
             print("⚠️  Agent response didn't match any tool call pattern")
         print("=" * (25 + len(source)))
     
-    return Action(
+    fallback_action = Action(
         name=RESPOND_ACTION_NAME,
         kwargs={RESPOND_ACTION_FIELD_NAME: response_text.strip()}
     )
+    
+    # Assert the action is valid before returning
+    assert hasattr(fallback_action, 'name') and hasattr(fallback_action, 'kwargs'), \
+        f"Invalid Action created: {fallback_action}"
+    assert fallback_action.name == RESPOND_ACTION_NAME, "Fallback action must be respond action"
+    
+    return fallback_action
 
 
 def _extract_openai_tool_calls(text: str, tool_names: set) -> Optional[Action]:
@@ -218,7 +229,8 @@ def _extract_openai_tool_calls(text: str, tool_names: set) -> Optional[Action]:
                                 print(f"   Tool: {tool_name}")
                                 print(f"   Sanitized kwargs: {sanitized_kwargs}")
                                 print(f"   Error: {e}")
-                            break  # Exit this parsing attempt
+                            # Return None to continue with other parsing attempts
+                            return None
                         
         except json.JSONDecodeError as e:
             if os.environ.get("DEBUG_PARSER", "0") == "1":

@@ -11,10 +11,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. [Core Components](#core-components)
 4. [Dataset and Data Pipeline](#dataset-and-data-pipeline)
 5. [Training Pipeline](#training-pipeline)
-6. [Environment Variables and Configuration](#environment-variables-and-configuration)
-7. [Development Commands](#development-commands)
-8. [Debugging and Monitoring](#debugging-and-monitoring)
-9. [Common Issues and Solutions](#common-issues-and-solutions)
+6. [Reward Calculation](#reward-calculation)
+7. [Environment Variables and Configuration](#environment-variables-and-configuration)
+8. [Development Commands](#development-commands)
+9. [Debugging and Monitoring](#debugging-and-monitoring)
+10. [Common Issues and Solutions](#common-issues-and-solutions)
 
 ## Project Overview
 
@@ -206,13 +207,17 @@ For each epoch:
 
 ### 4. Reward Calculation
 
-**Location**: tau_bench/envs/base.py
+**Overview**: Binary reward (0 or 1) calculated at episode end based on task completion.
 
-**Logic**:
-1. Initial reward: 1.0
-2. Check data consistency (environment state hash)
-3. Verify required outputs in agent responses
-4. Final: 0.0 if any check fails, 1.0 if all pass
+**Detailed Documentation**: See [REWARD_CALCULATION.md](./REWARD_CALCULATION.md) for comprehensive details.
+
+**Key Points**:
+- Initial reward: 1.0
+- Data consistency check via hash comparison
+- Required outputs verification in agent responses
+- Final: 0.0 if any check fails, 1.0 if all pass
+
+**IMPORTANT**: When modifying reward calculation logic, always update REWARD_CALCULATION.md
 
 ## Environment Variables and Configuration
 
@@ -375,6 +380,7 @@ wandb login
 - Add few-shot examples to system prompt
 - Tune temperature for tool selection
 - Consider curriculum learning (start with easier domains)
+- Review REWARD_CALCULATION.md to understand failure modes
 
 ### 4. Memory Issues
 **Issue**: OOM with large batch sizes or context length
@@ -402,4 +408,5 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 2. **Multi-Domain Training**: Consider domain-specific fine-tuning
 3. **Tool Format**: May benefit from instruction tuning on tool format
 4. **User Simulation**: Experiment with different user strategies
-5. **Reward Shaping**: Consider intermediate rewards for partial success
+5. **Reward Shaping**: Consider intermediate rewards for partial success (see REWARD_CALCULATION.md)
+6. **Reward Updates**: Any changes to reward calculation must be documented in REWARD_CALCULATION.md
