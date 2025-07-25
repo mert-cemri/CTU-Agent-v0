@@ -82,9 +82,10 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
                     print(f"   🔄 Parsed JSON from string, retrying as dict")
                 # Recursively call with parsed JSON
                 return parse_tool_calling_response(parsed_json, source)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
                 if os.environ.get("DEBUG_PARSER", "0") == "1":
-                    print(f"   ❌ Failed to parse JSON from string")
+                    print(f"   ❌ Failed to parse JSON from string: {e}")
+                    print(f"   📝 Malformed JSON (first 200 chars): {repr(cleaned_response[:200])}")
                 pass
         
         # Fallback to respond action
