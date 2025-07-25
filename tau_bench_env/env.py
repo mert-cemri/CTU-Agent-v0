@@ -414,16 +414,17 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         
         # Log complete conversation rollouts for observability (AFTER conversation history is updated)
         # if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
-        if os.environ.get("DEBUG_PARSER", "0") == "1":  # Log every 5 turns
-            self._log_conversation_rollout(parsed_action, tau_result)
-        
+            # self._log_conversation_rollout(parsed_action, tau_result)
+            
         # Calculate reward if conversation is done
         reward = tau_result.reward if done else 0.0
         
         # Mark as done
         if done:
             self.conversation_done = True
-        
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                self._log_conversation_rollout(parsed_action, tau_result)
+
         return BaseTextEnvStepOutput(
             observations=observations,
             reward=reward,
