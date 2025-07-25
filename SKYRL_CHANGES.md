@@ -321,3 +321,166 @@ environment:
 ```
 
 Both flags must be `true` for native tool calling to be active. If either is `false`, the system falls back to traditional text-based parsing.
+
+---
+
+## 5. Debugging and Empty Response Fixes (`skyrl_train/generators/skyrl_gym_generator.py`)
+
+### Changes Made
+
+#### A. Added Debug Logging for Native Tool Calling
+
+**ADDED** debug logging after engine output generation:
+
+```python
+# Debug logging for native tool calling
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"\n🎮 GENERATOR DEBUG:")
+    print(f"   output type: {type(output)}")
+    print(f"   output length: {len(output) if isinstance(output, str) else 'N/A'}")
+    print(f"   output preview: {repr(output[:200])}")
+```
+
+**ADDED** debug logging for input_ids growth tracking:
+
+```python
+if self.use_conversation_multi_turn:
+    prev_input_ids_len = len(input_ids)
+    chat_history, chat_end_index, loss_mask, input_ids = self._update_engine_input_chat_history(
+        chat_history, chat_end_index, loss_mask, input_ids, output, new_obs
+    )
+    if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+        print(f"   input_ids growth: {prev_input_ids_len} -> {len(input_ids)} (+{len(input_ids) - prev_input_ids_len})")
+```
+
+**ADDED** debug logging for response_ids extraction:
+
+```python
+# Debug logging before extracting response_ids
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"\n🔍 RESPONSE_IDS EXTRACTION DEBUG:")
+    print(f"   initial_prompt_length: {initial_prompt_length}")
+    print(f"   input_ids length: {len(input_ids)}")
+    print(f"   custom_chat_template: {self.custom_chat_template is not None}")
+    print(f"   use_conversation_multi_turn: {self.use_conversation_multi_turn}")
+```
+
+**ADDED** debug logging for final response_ids:
+
+```python
+# Debug logging for response_ids
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"\n📊 FINAL RESPONSE_IDS DEBUG:")
+    print(f"   response_ids length: {len(response_ids)}")
+    print(f"   response_ids preview: {response_ids[:20] if response_ids else 'EMPTY'}")
+    print(f"   reward: {reward}")
+```
+
+#### B. Critical Fix for Empty Response IDs
+
+**ADDED** fallback logic to extract response_ids from chat history when empty:
+
+```python
+# CRITICAL FIX: If response_ids is empty but we have a chat history, extract from chat history
+if len(response_ids) == 0 and self.use_conversation_multi_turn and len(chat_history) > len(prompt):
+    # Extract all assistant messages from chat history
+    assistant_messages = []
+    for msg in chat_history[len(prompt):]:
+        if msg.get("role") == "assistant":
+            assistant_messages.append(msg.get("content", ""))
+    
+    # Tokenize all assistant messages
+    if assistant_messages:
+        combined_response = " ".join(assistant_messages)
+        response_ids = self.tokenizer.encode(combined_response, add_special_tokens=False)
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"   FALLBACK: Extracted {len(response_ids)} tokens from {len(assistant_messages)} assistant messages")
+```
+
+### Reasons for Changes
+
+- **Debug Logging**: Essential for understanding why all 768 responses were being filtered as empty
+- **Response ID Extraction Fix**: The core issue was that when using `use_conversation_multi_turn=true` with native tool calling, the `input_ids` weren't being properly updated, resulting in empty `response_ids`
+- **Fallback Logic**: Provides a safety net to extract response tokens from the chat history when the normal extraction fails
+
+---
+
+## 6. Enhanced Debug Logging in Trainer (`skyrl_train/trainer.py`)
+
+### Changes Made
+
+**MODIFIED** empty response filtering to add detailed debug logging:
+
+```python
+# Filter out empty responses
+valid_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) > 0]
+
+# Debug logging for empty responses
+if len(valid_indices) < len(uids):
+    empty_count = len(uids) - len(valid_indices)
+    logger.warning(f"Found {empty_count} empty responses out of {len(uids)} total")
+    # Sample a few empty responses for debugging
+    empty_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) == 0]
+    for idx in empty_indices[:3]:  # Show first 3 empty responses
+        logger.debug(f"Empty response at index {idx}:")
+        logger.debug(f"  Prompt: {generator_output['prompts'][idx] if 'prompts' in generator_output else 'N/A'}")
+        logger.debug(f"  Reward: {generator_output['rewards'][idx] if idx < len(generator_output['rewards']) else 'N/A'}")
+```
+
+### Reasons for Changes
+
+- **Better Visibility**: Provides insight into why responses are empty
+- **Debugging Aid**: Shows prompts and rewards for empty responses to help diagnose issues
+- **Limited Output**: Only shows first 3 empty responses to avoid log spam
+
+---
+
+## 7. Debug Logging in VLLM Engines (`skyrl_train/inference_engines/vllm/vllm_engine.py`)
+
+### Changes Made
+
+**ADDED** debug logging for native tool calling in both sync and async engines:
+
+```python
+if use_native_tool_calling:
+    # Use chat() method with tools - prompts_or_token_ids is a list of conversations
+    import os
+    if os.environ.get("DEBUG_PARSER", "0") == "1":
+        print(f"\n🚀 VLLM ENGINE DEBUG:")
+        print(f"   Using native tool calling: {use_native_tool_calling}")
+        print(f"   Number of conversations: {len(prompts_or_token_ids)}")
+        print(f"   Tools provided: {tools is not None}")
+        if tools:
+            print(f"   Number of tools: {len(tools)}")
+            print(f"   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in tools]}")
+    
+    outputs = []
+    for i, conversation in enumerate(prompts_or_token_ids):
+        if os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"   🎯 Processing conversation {i+1}")
+            print(f"   Conversation length: {len(conversation)} messages")
+        
+        # ... chat() call ...
+        
+        if os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"   📤 Chat output type: {type(output)}")
+            print(f"   📤 Chat output length: {len(output) if hasattr(output, '__len__') else 'N/A'}")
+            if output and len(output) > 0:
+                resp = output[0].outputs[0] if hasattr(output[0], 'outputs') and output[0].outputs else None
+                if resp:
+                    print(f"   📤 First response text: {repr(resp.text[:100])}...")
+```
+
+### Reasons for Changes
+
+- **Tool Verification**: Confirms tools are being passed correctly to VLLM
+- **Response Tracking**: Shows what VLLM returns from the chat() method
+- **Conversation Insights**: Helps understand the structure of inputs and outputs
+
+---
+
+## Impact of Changes
+
+These debugging additions and fixes address the critical issue where all 768 responses were being filtered as empty, preventing any training from occurring. The root cause was that `response_ids` extraction wasn't working correctly with the combination of `use_conversation_multi_turn=true` and native tool calling.
+
+The fallback mechanism ensures that even if the normal token tracking fails, we can still extract the assistant's responses from the chat history and tokenize them for training.

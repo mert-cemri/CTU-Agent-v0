@@ -762,6 +762,17 @@ class RayPPOTrainer:
 
         # Filter out empty responses
         valid_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) > 0]
+        
+        # Debug logging for empty responses
+        if len(valid_indices) < len(uids):
+            empty_count = len(uids) - len(valid_indices)
+            logger.warning(f"Found {empty_count} empty responses out of {len(uids)} total")
+            # Sample a few empty responses for debugging
+            empty_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) == 0]
+            for idx in empty_indices[:3]:  # Show first 3 empty responses
+                logger.debug(f"Empty response at index {idx}:")
+                logger.debug(f"  Prompt: {generator_output['prompts'][idx] if 'prompts' in generator_output else 'N/A'}")
+                logger.debug(f"  Reward: {generator_output['rewards'][idx] if idx < len(generator_output['rewards']) else 'N/A'}")
 
         if len(valid_indices) == len(uids):
             # No filtering needed

@@ -125,6 +125,13 @@ class SkyRLGymGenerator(GeneratorInterface):
             engine_output = await self.inference_engine_client.generate(engine_input)
             output = engine_output["responses"][0]
             stop_reason = engine_output["stop_reasons"][0]
+            
+            # Debug logging for native tool calling
+            if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"\n🎮 GENERATOR DEBUG:")
+                print(f"   output type: {type(output)}")
+                print(f"   output length: {len(output) if isinstance(output, str) else 'N/A'}")
+                print(f"   output preview: {repr(output[:200])}")
             if self.env_executor is not None:
                 loop = asyncio.get_running_loop()
                 env_step_output: BaseTextEnvStepOutput = await loop.run_in_executor(self.env_executor, env.step, output)
@@ -138,9 +145,12 @@ class SkyRLGymGenerator(GeneratorInterface):
                 output = env_step_output["postprocessed_action"]
 
             if self.use_conversation_multi_turn:
+                prev_input_ids_len = len(input_ids)
                 chat_history, chat_end_index, loss_mask, input_ids = self._update_engine_input_chat_history(
                     chat_history, chat_end_index, loss_mask, input_ids, output, new_obs
                 )
+                if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   input_ids growth: {prev_input_ids_len} -> {len(input_ids)} (+{len(input_ids) - prev_input_ids_len})")
             else:
                 loss_mask, input_ids = self._update_engine_input_token_ids(output, new_obs, loss_mask, input_ids)
 
@@ -151,6 +161,15 @@ class SkyRLGymGenerator(GeneratorInterface):
         env.close()  # does nothing for now
 
         prompt_ids = input_ids[:initial_prompt_length]
+        
+        # Debug logging before extracting response_ids
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"\n🔍 RESPONSE_IDS EXTRACTION DEBUG:")
+            print(f"   initial_prompt_length: {initial_prompt_length}")
+            print(f"   input_ids length: {len(input_ids)}")
+            print(f"   custom_chat_template: {self.custom_chat_template is not None}")
+            print(f"   use_conversation_multi_turn: {self.use_conversation_multi_turn}")
+            
         if self.custom_chat_template and self.use_conversation_multi_turn:
             response_encodings = self.tokenizer.apply_chat_template(
                 chat_history[len(prompt) :],
@@ -164,6 +183,23 @@ class SkyRLGymGenerator(GeneratorInterface):
             response_ids = response_encodings["input_ids"]
         else:
             response_ids = input_ids[initial_prompt_length:]
+            if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"   response_ids extracted: {len(response_ids)} tokens")
+            
+            # CRITICAL FIX: If response_ids is empty but we have a chat history, extract from chat history
+            if len(response_ids) == 0 and self.use_conversation_multi_turn and len(chat_history) > len(prompt):
+                # Extract all assistant messages from chat history
+                assistant_messages = []
+                for msg in chat_history[len(prompt):]:
+                    if msg.get("role") == "assistant":
+                        assistant_messages.append(msg.get("content", ""))
+                
+                # Tokenize all assistant messages
+                if assistant_messages:
+                    combined_response = " ".join(assistant_messages)
+                    response_ids = self.tokenizer.encode(combined_response, add_special_tokens=False)
+                    if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   FALLBACK: Extracted {len(response_ids)} tokens from {len(assistant_messages)} assistant messages")
 
         if not self.use_conversation_multi_turn:
             # we might need to add the eos token to the response ids
@@ -182,6 +218,13 @@ class SkyRLGymGenerator(GeneratorInterface):
             stop_reason = "length"
         response_ids = response_ids[:max_response_tokens]
         loss_mask = loss_mask[:max_response_tokens]
+        
+        # Debug logging for response_ids
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"\n📊 FINAL RESPONSE_IDS DEBUG:")
+            print(f"   response_ids length: {len(response_ids)}")
+            print(f"   response_ids preview: {response_ids[:20] if response_ids else 'EMPTY'}")
+            print(f"   reward: {reward}")
 
         return response_ids, reward, stop_reason, loss_mask, prompt_ids
 
