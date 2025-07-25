@@ -37,7 +37,10 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
                         arguments = func_info.get("arguments", {})
                     else:
                         # func_info is not a dict, skip this tool call
-                        continue
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"   ⚠️  func_info is not dict: {type(func_info)}")
+                        tool_name = None
+                        arguments = {}
                     
                     # Parse arguments if they're a JSON string
                     if isinstance(arguments, str):
