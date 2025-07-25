@@ -31,8 +31,13 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
                 tool_call = tool_calls[0]
                 if "function" in tool_call:
                     func_info = tool_call["function"]
-                    tool_name = func_info.get("name")
-                    arguments = func_info.get("arguments", {})
+                    # Ensure func_info is a dict before calling .get()
+                    if isinstance(func_info, dict):
+                        tool_name = func_info.get("name")
+                        arguments = func_info.get("arguments", {})
+                    else:
+                        # func_info is not a dict, skip this tool call
+                        continue
                     
                     # Parse arguments if they're a JSON string
                     if isinstance(arguments, str):
