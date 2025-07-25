@@ -21,14 +21,49 @@ class TauBenchEnv(BaseTextEnv):
     """
 
     def _convert_tools_to_openai_format(self) -> List[Dict[str, Any]]:
-        """Convert tau_bench tools info to OpenAI tools format."""
+        """Convert tau_bench tools info to OpenAI tools format.
+        
+        Expected tau_bench format:
+        {
+            "function": {
+                "name": "tool_name",
+                "description": "...",
+                "parameters": {...}
+            }
+        }
+        
+        Converts to OpenAI format:
+        {
+            "type": "function",
+            "function": {
+                "name": "tool_name",
+                "description": "...", 
+                "parameters": {...}
+            }
+        }
+        """
+        assert isinstance(self.tools_info, list), \
+            f"tools_info must be a list, got {type(self.tools_info)}"
+        assert len(self.tools_info) > 0, \
+            "tools_info must not be empty"
+        
         openai_tools = []
-        for tool in self.tools_info:
+        for i, tool in enumerate(self.tools_info):
+            assert isinstance(tool, dict), \
+                f"Tool {i} must be dict, got {type(tool)}: {tool}"
+            assert "function" in tool, \
+                f"Tool {i} must have 'function' key, got keys: {list(tool.keys())}"
+            assert isinstance(tool["function"], dict), \
+                f"Tool {i} function must be dict, got {type(tool['function'])}"
+            assert "name" in tool["function"], \
+                f"Tool {i} function must have 'name', got keys: {list(tool['function'].keys())}"
+            
             openai_tool = {
                 "type": "function",
                 "function": tool["function"]
             }
             openai_tools.append(openai_tool)
+        
         return openai_tools
     
     def __init__(self, env_config: DictConfig, extras: Dict[str, Any] = {}):
@@ -296,6 +331,22 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
             raise RuntimeError("Environment not initialized. Call init() first.")
         
         self.turns += 1
+        
+        # Validate input
+        assert isinstance(action, str), \
+            f"action must be string, got {type(action)}: {repr(action)[:100]}"
+        
+        # Debug logging for native tool calling
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"\n🎯 ENV STEP DEBUG:")
+            print(f"   use_native_tool_calling: {self.use_native_tool_calling}")
+            print(f"   action type: {type(action)}")
+            print(f"   action length: {len(action)}")
+            # Check if action looks like JSON
+            if action.strip().startswith('{'):
+                print(f"   action appears to be JSON")
+            else:
+                print(f"   action appears to be plain text")
         
         # Parse agent's LLM response to tau_bench Action
         if self.use_native_tool_calling:
