@@ -190,6 +190,8 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
         """Common output processing logic for both generate() and chat() methods."""
         responses: List[str] = []
         stop_reasons: List[str] = []
+        response_token_ids: List[List[int]] = []
+        
         for output in outputs:
             # TODO(tgriggs): Support n>1 sampling.
             assert (
@@ -198,10 +200,17 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
             resp = output.outputs[0]
             responses.append(resp.text)
             stop_reasons.append(resp.finish_reason)
+            
+            # Extract token_ids if available (from chat() method)
+            if hasattr(resp, 'token_ids') and resp.token_ids is not None:
+                response_token_ids.append(resp.token_ids)
+            else:
+                response_token_ids.append([])  # Empty list for generate() method
 
         return InferenceEngineOutput(
             responses=responses,
             stop_reasons=stop_reasons,
+            response_token_ids=response_token_ids,
         )
 
     def _get_engine(self):

@@ -127,12 +127,26 @@ class SkyRLGymGenerator(GeneratorInterface):
             output = engine_output["responses"][0]
             stop_reason = engine_output["stop_reasons"][0]
             
+            # Extract pre-computed token_ids if available (for native tool calling)
+            output_token_ids = None
+            if "response_token_ids" in engine_output and engine_output["response_token_ids"]:
+                output_token_ids = engine_output["response_token_ids"][0]
+            
             # Debug logging for native tool calling
             if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
                 print(f"\n🎮 GENERATOR DEBUG:")
                 print(f"   output type: {type(output)}")
                 print(f"   output length: {len(output) if isinstance(output, str) else 'N/A'}")
                 print(f"   output preview: {repr(output[:200])}")
+                
+                # Check if this is a structured tool call output that needs processing
+                if isinstance(output, str) and '<tool_call>' in output:
+                    print(f"   🔧 Detected structured tool call output")
+                elif isinstance(output, str) and output.strip().startswith('{') and '"tool_calls"' in output:
+                    print(f"   🔧 Detected JSON tool call output")
+                elif not output or (isinstance(output, str) and len(output.strip()) == 0):
+                    print(f"   ⚠️  WARNING: Empty output detected!")
+                    
             if self.env_executor is not None:
                 loop = asyncio.get_running_loop()
                 env_step_output: BaseTextEnvStepOutput = await loop.run_in_executor(self.env_executor, env.step, output)
@@ -148,7 +162,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             if self.use_conversation_multi_turn:
                 prev_input_ids_len = len(input_ids)
                 chat_history, chat_end_index, loss_mask, input_ids = self._update_engine_input_chat_history(
-                    chat_history, chat_end_index, loss_mask, input_ids, output, new_obs
+                    chat_history, chat_end_index, loss_mask, input_ids, output, new_obs, output_token_ids
                 )
                 if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
                     print(f"   input_ids growth: {prev_input_ids_len} -> {len(input_ids)} (+{len(input_ids) - prev_input_ids_len})")
@@ -424,6 +438,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         input_ids: List[int],
         output: str,
         new_obs: ConversationType,
+        output_token_ids: Optional[List[int]] = None,
     ):
         """
         Update the chat history, loss mask, and input ids given a new model response and observation.
@@ -466,7 +481,20 @@ class SkyRLGymGenerator(GeneratorInterface):
             input_ids: List[int]
         """
         # get number of output tokens - only this many tokens should be loss masked to 1
-        num_output_tokens = len(self.tokenizer.encode(output, add_special_tokens=False))
+        # Use pre-computed token_ids if available (from native tool calling), otherwise tokenize
+        if output_token_ids is not None and len(output_token_ids) > 0:
+            num_output_tokens = len(output_token_ids)
+            if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"\n🔧 USING PRE-COMPUTED TOKENS:")
+                print(f"   Raw output: {repr(output[:100])}")
+                print(f"   Pre-computed tokens: {num_output_tokens}")
+        else:
+            # Fallback: tokenize the output text (for generate() method or when token_ids unavailable)
+            num_output_tokens = len(self.tokenizer.encode(output, add_special_tokens=False))
+            if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"\n🔧 TOKENIZING OUTPUT:")
+                print(f"   Raw output: {repr(output[:100])}")
+                print(f"   Tokenized to {num_output_tokens} tokens")
         # remove eos token from end of output if it exists, since it will be reapplied by the chat template
         if output.endswith(self.tokenizer.eos_token):
             output = output[: -len(self.tokenizer.eos_token)]
@@ -495,6 +523,12 @@ class SkyRLGymGenerator(GeneratorInterface):
 
         # entire response including chat template tokens
         new_resp_tokens = self.tokenizer.encode(curr[len(prev) :], add_special_tokens=False)
+        
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"   Template diff: {repr(curr[len(prev):])}")
+            print(f"   New response tokens: {len(new_resp_tokens)} tokens")
+            print(f"   Generation prompt tokens: {len(self.generation_prompt_ids)}")
+            print(f"   Original output tokens: {num_output_tokens}")
 
         # make sure that only the original output tokens are loss masked to 1
         new_loss_mask = [0] * len(self.generation_prompt_ids)  # 0 for generation prompt tokens
@@ -506,6 +540,10 @@ class SkyRLGymGenerator(GeneratorInterface):
 
         input_ids += new_resp_tokens
         chat_end_index += 1
+        
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"   Added {len(new_resp_tokens)} tokens to input_ids")
+            print(f"   Total input_ids length: {len(input_ids)}")
 
         # Add observations to chat history
         if len(new_obs) > 0:

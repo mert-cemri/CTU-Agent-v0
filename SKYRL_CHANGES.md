@@ -484,3 +484,139 @@ if use_native_tool_calling:
 These debugging additions and fixes address the critical issue where all 768 responses were being filtered as empty, preventing any training from occurring. The root cause was that `response_ids` extraction wasn't working correctly with the combination of `use_conversation_multi_turn=true` and native tool calling.
 
 The fallback mechanism ensures that even if the normal token tracking fails, we can still extract the assistant's responses from the chat history and tokenize them for training.
+
+**ADDED** enhanced debugging for structured tool call outputs:
+
+```python
+# Check if this is a structured tool call output that needs processing
+if isinstance(output, str) and '<tool_call>' in output:
+    print(f"   🔧 Detected structured tool call output")
+elif isinstance(output, str) and output.strip().startswith('{') and '"tool_calls"' in output:
+    print(f"   🔧 Detected JSON tool call output")
+elif not output or (isinstance(output, str) and len(output.strip()) == 0):
+    print(f"   ⚠️  WARNING: Empty output detected!")
+```
+
+**ADDED** detailed tokenization debugging in `_update_engine_input_chat_history`:
+
+```python
+# CRITICAL FIX: For native tool calling, we need to ensure output is properly tokenized
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"\n🔧 TOKENIZING OUTPUT:")
+    print(f"   Raw output: {repr(output[:100])}")
+    
+num_output_tokens = len(self.tokenizer.encode(output, add_special_tokens=False))
+
+# ... later ...
+
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"   Template diff: {repr(curr[len(prev):])}")
+    print(f"   New response tokens: {len(new_resp_tokens)} tokens")
+    print(f"   Generation prompt tokens: {len(self.generation_prompt_ids)}")
+    print(f"   Original output tokens: {num_output_tokens}")
+    print(f"   Added {len(new_resp_tokens)} tokens to input_ids")
+    print(f"   Total input_ids length: {len(input_ids)}")
+```
+
+These debugging additions help identify exactly where the tokenization process is failing with structured tool call outputs from VLLM's `chat()` method.
+
+---
+
+## 8. Critical Fix for Native Tool Calling Token Handling
+
+### Problem Identified
+
+The core issue was that SkyRL's generator was designed for `generate()` outputs but when using native tool calling with `chat()` method, VLLM provides pre-computed `token_ids` that were being discarded. Instead, the system was re-tokenizing the text output, which caused mismatches and empty `response_ids`.
+
+### Changes Made
+
+#### A. Extended InferenceEngineOutput (`skyrl_train/inference_engines/base.py`)
+
+**ADDED** new field to capture token IDs from VLLM:
+
+```python
+class InferenceEngineOutput(TypedDict):
+    responses: List[str]
+    stop_reasons: List[str]
+    response_token_ids: Optional[List[List[int]]]  # Token IDs from VLLM for native tool calling
+```
+
+#### B. Enhanced VLLM Engine Output Processing (`skyrl_train/inference_engines/vllm/vllm_engine.py`)
+
+**MODIFIED** `_postprocess_outputs()` to extract token_ids from VLLM's CompletionOutput:
+
+```python
+def _postprocess_outputs(self, outputs):
+    """Common output processing logic for both generate() and chat() methods."""
+    responses: List[str] = []
+    stop_reasons: List[str] = []
+    response_token_ids: List[List[int]] = []
+    
+    for output in outputs:
+        # ... existing code ...
+        resp = output.outputs[0]
+        responses.append(resp.text)
+        stop_reasons.append(resp.finish_reason)
+        
+        # Extract token_ids if available (from chat() method)
+        if hasattr(resp, 'token_ids') and resp.token_ids is not None:
+            response_token_ids.append(resp.token_ids)
+        else:
+            response_token_ids.append([])  # Empty list for generate() method
+
+    return InferenceEngineOutput(
+        responses=responses,
+        stop_reasons=stop_reasons,
+        response_token_ids=response_token_ids,
+    )
+```
+
+#### C. Generator Token Handling (`skyrl_train/generators/skyrl_gym_generator.py`)
+
+**ADDED** extraction of pre-computed token_ids from engine output:
+
+```python
+# Extract pre-computed token_ids if available (for native tool calling)
+output_token_ids = None
+if "response_token_ids" in engine_output and engine_output["response_token_ids"]:
+    output_token_ids = engine_output["response_token_ids"][0]
+```
+
+**MODIFIED** `_update_engine_input_chat_history()` method signature to accept optional token_ids:
+
+```python
+def _update_engine_input_chat_history(
+    self,
+    chat_history: ConversationType,
+    chat_end_index: int,
+    loss_mask: List[int],
+    input_ids: List[int],
+    output: str,
+    new_obs: ConversationType,
+    output_token_ids: Optional[List[int]] = None,  # NEW PARAMETER
+):
+```
+
+**MODIFIED** token counting logic to use pre-computed tokens when available:
+
+```python
+# Use pre-computed token_ids if available (from native tool calling), otherwise tokenize
+if output_token_ids is not None and len(output_token_ids) > 0:
+    num_output_tokens = len(output_token_ids)
+    # Debug logging for pre-computed tokens
+else:
+    # Fallback: tokenize the output text (for generate() method or when token_ids unavailable)
+    num_output_tokens = len(self.tokenizer.encode(output, add_special_tokens=False))
+    # Debug logging for tokenized output
+```
+
+### Key Benefits
+
+1. **Eliminates Token Mismatch**: Uses VLLM's exact token_ids instead of re-tokenizing text
+2. **Maintains Backward Compatibility**: Falls back to text tokenization when token_ids unavailable
+3. **Fixes Empty Response Issue**: Proper token counting prevents `response_ids` from being empty
+4. **Performance Improvement**: Avoids redundant tokenization when tokens are already available
+
+### Impact
+
+This fix addresses the root cause where all 768 responses were being filtered as empty. The issue was that VLLM's `chat()` method provides structured tool call outputs with pre-computed token_ids, but SkyRL was discarding these and re-tokenizing the text, leading to mismatches in the token tracking logic.

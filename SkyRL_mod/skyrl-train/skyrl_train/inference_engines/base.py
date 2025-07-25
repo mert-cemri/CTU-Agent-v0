@@ -19,6 +19,7 @@ class InferenceEngineInput(TypedDict):
 class InferenceEngineOutput(TypedDict):
     responses: List[str]
     stop_reasons: List[str]
+    response_token_ids: Optional[List[List[int]]]  # Token IDs from VLLM for native tool calling
 
 
 class NamedWeightUpdateRequest(TypedDict):
