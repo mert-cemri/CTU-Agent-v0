@@ -422,8 +422,25 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # Mark as done
         if done:
             self.conversation_done = True
+            
+            # Log conversation rollout for debugging (limit to 4 per epoch)
             if os.environ.get("DEBUG_PARSER", "0") == "1":
-                self._log_conversation_rollout(parsed_action, tau_result)
+                # Track how many conversations we've logged
+                if not hasattr(self.__class__, '_conversations_logged'):
+                    self.__class__._conversations_logged = 0
+                    self.__class__._last_log_time = 0
+                
+                # Reset counter every ~30 minutes (roughly an epoch)
+                import time
+                current_time = time.time()
+                if current_time - self.__class__._last_log_time > 1800:  # 30 minutes
+                    self.__class__._conversations_logged = 0
+                    self.__class__._last_log_time = current_time
+                
+                # Only log first 4 conversations per epoch
+                if self.__class__._conversations_logged < 4:
+                    self._log_conversation_rollout(parsed_action, tau_result)
+                    self.__class__._conversations_logged += 1
 
         return BaseTextEnvStepOutput(
             observations=observations,
