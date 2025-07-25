@@ -224,8 +224,22 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
 
         if use_native_tool_calling:
             # Use chat() method with tools - prompts_or_token_ids is a list of conversations
+            import os
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"\n🚀 VLLM ENGINE DEBUG:")
+                print(f"   Using native tool calling: {use_native_tool_calling}")
+                print(f"   Number of conversations: {len(prompts_or_token_ids)}")
+                print(f"   Tools provided: {tools is not None}")
+                if tools:
+                    print(f"   Number of tools: {len(tools)}")
+                    print(f"   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in tools]}")
+            
             outputs = []
-            for conversation in prompts_or_token_ids:
+            for i, conversation in enumerate(prompts_or_token_ids):
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   🎯 Processing conversation {i+1}")
+                    print(f"   Conversation length: {len(conversation)} messages")
+                
                 output = await asyncio.to_thread(
                     self.llm.chat,
                     messages=conversation,
@@ -234,6 +248,15 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
                     add_generation_prompt=True,
                     use_tqdm=False
                 )
+                
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   📤 Chat output type: {type(output)}")
+                    print(f"   📤 Chat output length: {len(output) if hasattr(output, '__len__') else 'N/A'}")
+                    if output and len(output) > 0:
+                        resp = output[0].outputs[0] if hasattr(output[0], 'outputs') and output[0].outputs else None
+                        if resp:
+                            print(f"   📤 First response text: {repr(resp.text[:100])}...")
+                
                 outputs.extend(output)  # chat() returns list[RequestOutput]
         else:
             # Use traditional generate() method
@@ -317,8 +340,22 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
 
         if use_native_tool_calling:
             # Use chat() method with tools for async engine
+            import os
+            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                print(f"\n🚀 ASYNC VLLM ENGINE DEBUG:")
+                print(f"   Using native tool calling: {use_native_tool_calling}")
+                print(f"   Number of conversations: {len(prompts_or_token_ids)}")
+                print(f"   Tools provided: {tools is not None}")
+                if tools:
+                    print(f"   Number of tools: {len(tools)}")
+                    print(f"   Tool names: {[t.get('function', {}).get('name', 'unknown') for t in tools]}")
+            
             outputs = []
-            for conversation in prompts_or_token_ids:
+            for i, conversation in enumerate(prompts_or_token_ids):
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   🎯 Processing async conversation {i+1}")
+                    print(f"   Conversation length: {len(conversation)} messages")
+                
                 # For async engine, we need to use the async chat method
                 output = await self.llm.chat(
                     messages=conversation,
@@ -327,6 +364,15 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
                     add_generation_prompt=True,
                     use_tqdm=False
                 )
+                
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   📤 Async chat output type: {type(output)}")
+                    print(f"   📤 Async chat output length: {len(output) if hasattr(output, '__len__') else 'N/A'}")
+                    if output and len(output) > 0:
+                        resp = output[0].outputs[0] if hasattr(output[0], 'outputs') and output[0].outputs else None
+                        if resp:
+                            print(f"   📤 First async response text: {repr(resp.text[:100])}...")
+                
                 outputs.extend(output)  # chat() returns list[RequestOutput]
         else:
             # Use traditional generate() method
