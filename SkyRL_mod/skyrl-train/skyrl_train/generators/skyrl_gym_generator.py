@@ -14,6 +14,7 @@ from omegaconf import DictConfig
 from skyrl_gym.envs.base_text_env import BaseTextEnvStepOutput
 from skyrl_train.generators.utils import get_custom_chat_template, get_generation_prompt_ids
 
+import os
 
 class SkyRLGymGenerator(GeneratorInterface):
     def __init__(
