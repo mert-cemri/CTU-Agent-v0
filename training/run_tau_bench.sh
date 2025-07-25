@@ -72,6 +72,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.algorithm.kl_loss_coef=0.001 \
   trainer.ckpt_interval=10 \
   trainer.hf_save_interval=20 \
+  trainer.use_sample_packing=false \
   generator.max_turns=20 \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
