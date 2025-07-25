@@ -83,11 +83,13 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.sampling_params.temperature=0.7 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
+  generator.use_native_tool_calling=true \
   environment.env_class="tau_bench" \
   environment.skyrl_gym.tau_bench.user_strategy="llm" \
   environment.skyrl_gym.tau_bench.user_model="gpt-4o" \
   environment.skyrl_gym.tau_bench.user_provider="openai" \
   environment.skyrl_gym.tau_bench.max_turns=6 \
+  environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.max_env_workers=16 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \

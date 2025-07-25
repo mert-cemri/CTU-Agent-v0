@@ -351,8 +351,12 @@ def _extract_json_tool_call(text: str, tool_names: set) -> Optional[Action]:
                 elif "function" in parsed:
                     # Nested function format
                     func_info = parsed["function"]
-                    tool_name = func_info.get("name")
-                    kwargs = func_info.get("arguments", {})
+                    if isinstance(func_info, dict):
+                        tool_name = func_info.get("name")
+                        kwargs = func_info.get("arguments", {})
+                    else:
+                        # func_info is not a dict, skip this pattern
+                        continue
                 else:
                     continue
                 
