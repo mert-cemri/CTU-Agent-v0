@@ -59,11 +59,11 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.export_path="$HOME/exports/tau_bench" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=128 \
-  trainer.policy_mini_batch_size=32 \
+  trainer.train_batch_size=64 \
+  trainer.policy_mini_batch_size=16 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
+  trainer.max_prompt_length=8192 \
   trainer.eval_batch_size=64 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
@@ -76,9 +76,10 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
+  generator.n_samples_per_prompt=1 \
   generator.gpu_memory_utilization=0.7 \
-  generator.max_input_length=16384 \
+  generator.max_input_length=8192 \
+  generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.7 \
   generator.sampling_params.top_p=0.9 \
