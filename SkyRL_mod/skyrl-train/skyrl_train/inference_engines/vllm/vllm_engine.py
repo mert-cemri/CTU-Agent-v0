@@ -265,6 +265,9 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
                         resp = output[0].outputs[0] if hasattr(output[0], 'outputs') and output[0].outputs else None
                         if resp:
                             print(f"   📤 First response text: {repr(resp.text[:100])}...")
+                            if hasattr(resp, 'token_ids') and resp.token_ids:
+                                print(f"   📤 Token IDs available: {len(resp.token_ids)} tokens")
+                                print(f"   📤 First 10 token IDs: {resp.token_ids[:10]}")
                 
                 outputs.extend(output)  # chat() returns list[RequestOutput]
         else:

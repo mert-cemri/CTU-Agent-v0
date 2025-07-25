@@ -620,3 +620,69 @@ else:
 ### Impact
 
 This fix addresses the root cause where all 768 responses were being filtered as empty. The issue was that VLLM's `chat()` method provides structured tool call outputs with pre-computed token_ids, but SkyRL was discarding these and re-tokenizing the text, leading to mismatches in the token tracking logic.
+
+---
+
+## 9. Critical Fix for Chat Template Comparison Logic
+
+### Problem Identified
+
+After implementing token ID extraction, the responses were still empty due to a logic error in `_update_engine_input_chat_history`. The template comparison was happening AFTER adding the assistant response to chat history, causing both `prev` and `curr` templates to include the same content, resulting in empty template diff and zero tokens added to `input_ids`.
+
+**Debug evidence**: 
+- "Template diff: ''" (empty string)
+- "New response tokens: 0 tokens" 
+- "Added 0 tokens to input_ids"
+
+### Root Cause
+
+The sequence was:
+1. Add assistant response to `chat_history`
+2. Compare `chat_history[:chat_end_index]` vs `chat_history[:chat_end_index + 1]`
+3. Both slices included the assistant response, so template diff was empty
+
+### Solution
+
+**MODIFIED** template comparison logic to capture the "before" state properly:
+
+```python
+# CRITICAL FIX: Get the template state BEFORE adding assistant response for proper comparison
+if not self.custom_chat_template:
+    prev_template = self.tokenizer.apply_chat_template(
+        chat_history[:chat_end_index], add_generation_prompt=False, tokenize=False
+    )
+
+# Add assistant response to chat history
+chat_history += [{"role": "assistant", "content": output}]
+
+# ... later ...
+
+# Use the pre-computed previous template and compute current template
+prev = prev_template
+curr = self.tokenizer.apply_chat_template(
+    chat_history[:chat_end_index + 1], add_generation_prompt=False, tokenize=False
+)
+```
+
+**ADDED** comprehensive debugging to track template comparison:
+
+```python
+# Debug the template comparison issue
+if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+    print(f"\n🔍 TEMPLATE COMPARISON DEBUG:")
+    print(f"   chat_end_index: {chat_end_index}")
+    print(f"   chat_history length: {len(chat_history)}")
+    print(f"   prev slice: chat_history[:{chat_end_index}] = {len(chat_history[:chat_end_index])} messages")
+    print(f"   curr slice: chat_history[:{chat_end_index + 1}] = {len(chat_history[:chat_end_index + 1])} messages")
+    print(f"   Template diff length: {len(curr) - len(prev)}")
+```
+
+### Impact
+
+This fix ensures that:
+1. Template comparison captures the actual difference introduced by the assistant response
+2. `new_resp_tokens` correctly represents the assistant's output in tokenized form
+3. `input_ids` grows properly with each turn
+4. `response_ids` extraction succeeds instead of returning empty arrays
+
+This should resolve the final blocker preventing training from proceeding.

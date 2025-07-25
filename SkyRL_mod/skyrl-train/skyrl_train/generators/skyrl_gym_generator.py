@@ -499,6 +499,12 @@ class SkyRLGymGenerator(GeneratorInterface):
         if output.endswith(self.tokenizer.eos_token):
             output = output[: -len(self.tokenizer.eos_token)]
 
+        # CRITICAL FIX: Get the template state BEFORE adding assistant response for proper comparison
+        if not self.custom_chat_template:
+            prev_template = self.tokenizer.apply_chat_template(
+                chat_history[:chat_end_index], add_generation_prompt=False, tokenize=False
+            )
+
         # Add assistant response to chat history
         chat_history += [{"role": "assistant", "content": output}]
 
@@ -513,13 +519,32 @@ class SkyRLGymGenerator(GeneratorInterface):
             )
             return chat_history, chat_end_index, loss_mask, input_ids
 
-        # apply chat template without tokenization
-        prev = self.tokenizer.apply_chat_template(
-            chat_history[:chat_end_index], add_generation_prompt=False, tokenize=False
-        )
+        # Use the pre-computed previous template and compute current template
+        # The assistant message is now at index chat_end_index
+        prev = prev_template
         curr = self.tokenizer.apply_chat_template(
-            chat_history[: chat_end_index + 1], add_generation_prompt=False, tokenize=False
+            chat_history[:chat_end_index + 1], add_generation_prompt=False, tokenize=False
         )
+        
+        # Debug the template comparison issue
+        if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
+            print(f"\n🔍 TEMPLATE COMPARISON DEBUG:")
+            print(f"   chat_end_index: {chat_end_index}")
+            print(f"   chat_history length: {len(chat_history)}")
+            print(f"   prev slice: chat_history[:{chat_end_index}] = {len(chat_history[:chat_end_index])} messages")
+            print(f"   curr slice: chat_history[:{chat_end_index + 1}] = {len(chat_history[:chat_end_index + 1])} messages")
+            if len(chat_history) > chat_end_index:
+                print(f"   Message at chat_end_index: {chat_history[chat_end_index].get('role', 'unknown')}")
+            print(f"   prev template length: {len(prev)}")
+            print(f"   curr template length: {len(curr)}")
+            print(f"   Template diff length: {len(curr) - len(prev)}")
+            if len(curr) == len(prev):
+                print(f"   ⚠️  WARNING: No template difference detected! Check chat_end_index.")
+                # Let's see what's at the end of chat_history
+                if len(chat_history) > 0:
+                    print(f"   Last message in chat_history: {chat_history[-1].get('role', 'unknown')}")
+                    if chat_history[-1].get('role') == 'assistant':
+                        print(f"   Assistant message IS in chat_history but not in curr slice!")
 
         # entire response including chat template tokens
         new_resp_tokens = self.tokenizer.encode(curr[len(prev) :], add_special_tokens=False)
