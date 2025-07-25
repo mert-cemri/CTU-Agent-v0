@@ -13,7 +13,7 @@
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
 TENSOR_PARALLEL_SIZE=4
-EPOCHS=5
+EPOCHS=50
 
 # Model Configuration - Upgraded to more powerful 3B model
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
@@ -66,10 +66,10 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.max_prompt_length=8192 \
   trainer.eval_batch_size=64 \
   trainer.eval_before_train=true \
-  trainer.eval_interval=5 \
-  trainer.policy.optimizer_config.lr=1.0e-6 \
+  trainer.eval_interval=2 \
+  trainer.policy.optimizer_config.lr=5.0e-7 \
   trainer.algorithm.use_kl_loss=true \
-  trainer.algorithm.kl_loss_coef=0.001 \
+  trainer.algorithm.kl_loss_coef=0.01 \
   trainer.ckpt_interval=10 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
@@ -77,7 +77,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=1 \
+  generator.n_samples_per_prompt=3 \
   generator.gpu_memory_utilization=0.7 \
   generator.max_input_length=8192 \
   generator.enforce_eager=true \

@@ -373,10 +373,6 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         assert isinstance(action, str) and len(action) > 0, "Agent action must be non-empty string"
         self.conversation_history.append(agent_message)
         
-        # Log complete conversation rollouts for observability
-        if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
-            self._log_conversation_rollout(parsed_action, tau_result)
-        
         # Check if conversation is done
         done = tau_result.done or self.turns >= self.max_turns
         
@@ -415,6 +411,11 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
             assert self.conversation_history[0]["role"] == "system", "First message must be system"
             assert self.conversation_history[-1]["role"] in ["user", "tool"], \
                 f"Last message role must be user or tool, got: {self.conversation_history[-1]['role']}"
+        
+        # Log complete conversation rollouts for observability (AFTER conversation history is updated)
+        # if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
+        if os.environ.get("DEBUG_PARSER", "0") == "1":  # Log every 5 turns
+            self._log_conversation_rollout(parsed_action, tau_result)
         
         # Calculate reward if conversation is done
         reward = tau_result.reward if done else 0.0
@@ -499,7 +500,6 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         print(f"   Done: {tau_result.done}")
         print(f"   Reward: {getattr(tau_result, 'reward', 'N/A')}")
         print(f"   Next obs length: {len(str(tau_result.observation))}")
-        
         print(f"{'='*80}\n")
     
     def _clean_user_response(self, user_response: str) -> str:
