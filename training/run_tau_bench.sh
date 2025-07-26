@@ -71,7 +71,6 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.policy.optimizer_config.num_warmup_steps=100 \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.001 \
-  trainer.algorithm.entropy_coef=0.01 \
   trainer.ckpt_interval=10 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
