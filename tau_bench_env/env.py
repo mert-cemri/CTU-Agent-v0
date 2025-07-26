@@ -416,8 +416,22 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
             # self._log_conversation_rollout(parsed_action, tau_result)
             
-        # Calculate reward if conversation is done
-        reward = tau_result.reward if done else 0.0
+        # Calculate reward
+        if done:
+            # Final reward from tau_bench (0 or 1)
+            reward = tau_result.reward
+        else:
+            # Intermediate reward shaping
+            reward = 0.0
+            
+            # Small reward for successful tool calls (not respond actions)
+            if parsed_action.name != RESPOND_ACTION_NAME:
+                reward += 0.1
+                
+            # Small penalty for malformed tool calls that fell back to respond
+            if self.use_native_tool_calling and isinstance(action, str) and '"tool_calls"' in action:
+                if parsed_action.name == RESPOND_ACTION_NAME:
+                    reward -= 0.05
         
         # Mark as done
         if done:
