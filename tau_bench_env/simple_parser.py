@@ -40,8 +40,14 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
             tool_calls = response["tool_calls"]
             
             # Validate structure - tool_calls MUST be a list
-            assert tool_calls is None or isinstance(tool_calls, list), \
-                f"tool_calls must be None or list, got {type(tool_calls)}: {tool_calls}"
+            if tool_calls is not None and not isinstance(tool_calls, list):
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"   ⚠️  Malformed tool_calls: {type(tool_calls)} = {repr(tool_calls)[:100]}")
+                    print(f"   💬 Falling back to respond action")
+                return Action(
+                    name=RESPOND_ACTION_NAME,
+                    kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                )
             
             if tool_calls and len(tool_calls) > 0:
                 # Process first tool call
