@@ -47,29 +47,60 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
                 # Process first tool call
                 tool_call = tool_calls[0]
                 
-                # Validate tool_call structure
-                assert isinstance(tool_call, dict), \
-                    f"Each tool_call must be a dict, got {type(tool_call)}: {tool_call}"
+                # Validate tool_call structure - if malformed, fall back to respond
+                if not isinstance(tool_call, dict):
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Malformed tool_call: {type(tool_call)} = {tool_call}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
                 
                 # Optional fields: id, type
                 # Required field: function
-                assert "function" in tool_call, \
-                    f"tool_call must have 'function' field, got keys: {list(tool_call.keys())}"
+                if "function" not in tool_call:
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Tool_call missing 'function' field: {list(tool_call.keys())}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
                 
                 func_info = tool_call["function"]
                 
-                # Validate function structure
-                assert isinstance(func_info, dict), \
-                    f"function must be a dict, got {type(func_info)}: {func_info}"
-                assert "name" in func_info, \
-                    f"function must have 'name' field, got keys: {list(func_info.keys())}"
+                # Validate function structure - if malformed, fall back to respond
+                if not isinstance(func_info, dict):
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Malformed function field: {type(func_info)} = {func_info}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
+                
+                if "name" not in func_info:
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Function missing 'name' field: {list(func_info.keys())}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
                 
                 tool_name = func_info["name"]
                 arguments = func_info.get("arguments", {})
                 
-                # Validate tool name
-                assert isinstance(tool_name, str) and len(tool_name) > 0, \
-                    f"tool name must be non-empty string, got: {repr(tool_name)}"
+                # Validate tool name - if malformed, fall back to respond
+                if not isinstance(tool_name, str) or len(tool_name) == 0:
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Invalid tool name: {repr(tool_name)}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
                 
                 # Parse arguments if they're a JSON string (OpenAI format)
                 if isinstance(arguments, str):
@@ -81,9 +112,15 @@ def parse_tool_calling_response(response: Union[str, Dict[str, Any]], source: st
                             print(f"   📋 Arguments string: {repr(arguments)}")
                         arguments = {}
                 
-                # Validate final arguments
-                assert isinstance(arguments, dict), \
-                    f"arguments must be dict after parsing, got {type(arguments)}: {arguments}"
+                # Validate final arguments - if malformed, fall back to respond
+                if not isinstance(arguments, dict):
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ⚠️  Invalid arguments after parsing: {type(arguments)} = {arguments}")
+                        print(f"   💬 Falling back to respond action")
+                    return Action(
+                        name=RESPOND_ACTION_NAME,
+                        kwargs={RESPOND_ACTION_FIELD_NAME: str(response)}
+                    )
                 
                 if os.environ.get("DEBUG_PARSER", "0") == "1":
                     print(f"   ✅ Found tool call: {tool_name} with args: {arguments}")
