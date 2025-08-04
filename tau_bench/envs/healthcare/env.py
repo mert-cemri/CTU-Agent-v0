@@ -1,13 +1,13 @@
 # Copyright Sierra
 
-from envs.base import Env
-from envs.healthcare.data import load_data
-from envs.healthcare.rules import RULES
-from envs.healthcare.tools import ALL_TOOLS
-from envs.healthcare.wiki import WIKI
+from tau_bench.envs.base import Env
+from tau_bench.envs.healthcare.data import load_data
+from tau_bench.envs.healthcare.rules import RULES
+from tau_bench.envs.healthcare.tools import ALL_TOOLS
+from tau_bench.envs.healthcare.wiki import WIKI
 from typing import Optional, Union, List
-from envs.user import UserStrategy
-from tau_types import Task
+from tau_bench.envs.user import UserStrategy
+from tau_bench.tau_types import Task
 
 
 class MockHealthcareDomainEnv(Env):

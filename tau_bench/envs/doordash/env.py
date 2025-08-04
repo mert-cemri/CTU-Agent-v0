@@ -4,13 +4,13 @@ import json
 import os
 from typing import Dict, Any, List, Optional, Union
 
-from envs.base import Env
-from envs.doordash.data import load_data
-from envs.doordash.rules import RULES
-from envs.doordash.tools import ALL_TOOLS
-from envs.doordash.wiki import WIKI
-from envs.user import UserStrategy
-from tau_types import Task
+from tau_bench.envs.base import Env
+from tau_bench.envs.doordash.data import load_data
+from tau_bench.envs.doordash.rules import RULES
+from tau_bench.envs.doordash.tools import ALL_TOOLS
+from tau_bench.envs.doordash.wiki import WIKI
+from tau_bench.envs.user import UserStrategy
+from tau_bench.tau_types import Task
 
 
 class MockDoordashDomainEnv(Env):
@@ -32,7 +32,7 @@ class MockDoordashDomainEnv(Env):
             # Currently no curated DoorDash tasks – supply one placeholder so the
             # base Env initialisation logic that picks a random task does not
             # fail.  Replace with real tasks when available.
-            from tau_types import Task, Action
+            from tau_bench.tau_types import Task, Action
 
             tasks = [
                 Task(

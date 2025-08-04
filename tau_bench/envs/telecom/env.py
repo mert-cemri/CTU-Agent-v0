@@ -1,13 +1,13 @@
 # Copyright Sierra
 
-from envs.base import Env
-from envs.telecom.data import load_data
-from envs.telecom.rules import RULES
-from envs.telecom.tools import ALL_TOOLS
-from envs.telecom.wiki import WIKI
+from tau_bench.envs.base import Env
+from tau_bench.envs.telecom.data import load_data
+from tau_bench.envs.telecom.rules import RULES
+from tau_bench.envs.telecom.tools import ALL_TOOLS
+from tau_bench.envs.telecom.wiki import WIKI
 from typing import Optional, Union, List
-from envs.user import UserStrategy
-from tau_types import Task
+from tau_bench.envs.user import UserStrategy
+from tau_bench.tau_types import Task
 
 
 class MockTelecomDomainEnv(Env):
