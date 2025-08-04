@@ -1,6 +1,6 @@
 # Copyright Sierra
 
-from tau_bench.envs.tool import Tool
+from envs.tool import Tool
 
 
 class Calculate(Tool):

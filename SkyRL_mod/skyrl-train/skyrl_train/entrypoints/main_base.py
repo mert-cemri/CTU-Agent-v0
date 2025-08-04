@@ -82,6 +82,7 @@ class BasePPOExp:
         self.tokenizer = self.get_tokenizer()
         self.train_dataset = self.get_train_dataset()
         self.eval_dataset = self.get_eval_dataset()
+        self.retail_eval_dataset = self.get_retail_eval_dataset()  # For multi-domain training
         self.colocate_pg = self.get_colocate_pg()
 
     @staticmethod
@@ -128,6 +129,24 @@ class BasePPOExp:
         if self.cfg.trainer.eval_interval > 0 and self.cfg.data.val_data:
             prompts_dataset = PromptDataset(
                 self.cfg.data.val_data,
+                self.tokenizer,
+                self.cfg.trainer.max_prompt_length,
+                num_processors=8,
+            )
+            return prompts_dataset
+        return None
+    
+    def get_retail_eval_dataset(self):
+        """Initializes the retail evaluation dataset for multi-domain training.
+
+        Returns:
+            PromptDataset: The retail evaluation dataset.
+        """
+        if (self.cfg.trainer.eval_interval > 0 and 
+            hasattr(self.cfg.data, 'retail_val_data') and 
+            self.cfg.data.retail_val_data):
+            prompts_dataset = PromptDataset(
+                self.cfg.data.retail_val_data,
                 self.tokenizer,
                 self.cfg.trainer.max_prompt_length,
                 num_processors=8,
@@ -262,6 +281,10 @@ class BasePPOExp:
             generator=generator,
             colocate_pg=self.colocate_pg,
         )
+        
+        # Set retail eval dataset if available (for multi-domain training)
+        if self.retail_eval_dataset is not None:
+            trainer.set_retail_eval_dataset(self.retail_eval_dataset)
 
         # Build the models
         trainer.build_models(PolicyWorker, CriticWorker, RefWorker, RewardWorker)

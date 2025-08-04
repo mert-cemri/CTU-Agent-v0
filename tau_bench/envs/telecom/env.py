@@ -1,13 +1,12 @@
 # Copyright Sierra
 
-from tau_bench.envs.base import Env
-from tau_bench.envs.telecom.data import load_data
-from tau_bench.envs.telecom.rules import RULES
-from tau_bench.envs.telecom.tools import ALL_TOOLS
-from tau_bench.envs.telecom.wiki import WIKI
-from typing import Optional, Union, List
-from tau_bench.envs.user import UserStrategy
-from tau_bench.tau_types import Task
+from envs.base import Env
+from envs.telecom.data import load_data
+from envs.telecom.rules import RULES
+from envs.telecom.tools import ALL_TOOLS
+from envs.telecom.wiki import WIKI
+from typing import Optional, Union
+from envs.user import UserStrategy
 
 
 class MockTelecomDomainEnv(Env):
@@ -18,10 +17,9 @@ class MockTelecomDomainEnv(Env):
         user_provider: Optional[str] = None,
         task_split: str = "test",
         task_index: Optional[int] = None,
-        custom_tasks: Optional[List[Task]] = None,
     ):
-        # Use custom tasks if provided, otherwise use empty list
-        tasks = custom_tasks if custom_tasks is not None else []
+        # For now, use empty tasks since we don't have telecom tasks yet
+        tasks = []
         
         super().__init__(
             data_load_func=load_data,

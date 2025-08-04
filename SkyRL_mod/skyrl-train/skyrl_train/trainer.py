@@ -75,6 +75,10 @@ class RayPPOTrainer:
         self.train_dataloader = self.build_dataloader(train_dataset, is_train=True)
         self.eval_dataloader = self.build_dataloader(eval_dataset, is_train=False) if eval_dataset is not None else None
         self.colocate_pg = colocate_pg
+        
+        # Second validation set (e.g., retail validation for multi-domain training)
+        self.retail_eval_dataset = None
+        self.retail_eval_dataloader = None
 
         self.resume_mode = ResumeMode(cfg.trainer.resume_mode)
 
@@ -119,6 +123,11 @@ class RayPPOTrainer:
             print(f"Validation set size: {len(dataloader)}")
 
         return dataloader
+
+    def set_retail_eval_dataset(self, retail_eval_dataset: Optional[PromptDataset]):
+        """Set the retail validation dataset for multi-domain training evaluation."""
+        self.retail_eval_dataset = retail_eval_dataset
+        self.retail_eval_dataloader = self.build_dataloader(retail_eval_dataset, is_train=False) if retail_eval_dataset is not None else None
 
     @torch.no_grad()
     async def eval(self) -> Dict[str, float]:
@@ -189,7 +198,43 @@ class RayPPOTrainer:
                     eval_metrics,
                 )
 
-        # 5. Restore self.all_metrics
+        # 5. Evaluate on retail validation set if available (for multi-domain training)
+        if self.retail_eval_dataloader is not None:
+            retail_generator_outputs: List[GeneratorOutput] = []
+            retail_concat_all_envs: List[str] = []
+            retail_concat_env_extras: List[Dict[str, Any]] = []
+            retail_concat_uids: List[str] = []
+            
+            pbar = tqdm(total=len(self.retail_eval_dataloader), initial=0, desc="Retail Validation Progress")
+            for _, prompts in enumerate(self.retail_eval_dataloader):
+                pbar.update(1)
+                generator_input, uids = self._prepare_generator_input(
+                    self.cfg.generator.eval_n_samples_per_prompt, prompts, sampling_params
+                )
+                generator_output: GeneratorOutput = await self.generate(generator_input)
+                retail_generator_outputs.append(generator_output)
+                retail_concat_all_envs.extend(generator_input["env_classes"])
+                retail_concat_env_extras.extend(generator_input["env_extras"])
+                retail_concat_uids.extend(uids)
+            
+            retail_concat_generator_outputs: GeneratorOutput = concatenate_generator_outputs(retail_generator_outputs)
+            
+            # Calculate retail eval metrics
+            retail_rewards = retail_concat_generator_outputs["rewards"]
+            retail_eval_metrics = {
+                "eval-retail/average_reward": np.mean(retail_rewards),
+                "eval-retail/success_rate": np.mean([r > 0 for r in retail_rewards]),
+                "eval-retail/num_samples": len(retail_rewards),
+            }
+            
+            # Add rollout metrics with eval-retail prefix
+            for key, value in retail_concat_generator_outputs["rollout_metrics"].items():
+                retail_eval_metrics[f"eval-retail/{key}"] = value
+            
+            # Merge retail metrics into main eval_metrics
+            eval_metrics.update(retail_eval_metrics)
+
+        # 6. Restore self.all_metrics
         self.all_metrics = all_metrics_copy
 
         return eval_metrics

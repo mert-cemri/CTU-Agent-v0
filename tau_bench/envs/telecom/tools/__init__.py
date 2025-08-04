@@ -8,9 +8,6 @@ from .get_customer_lines import GetCustomerLines
 from .get_line_details import GetLineDetails
 from .suspend_line import SuspendLine
 from .get_bill_details import GetBillDetails
-from .get_customer_info import GetCustomerInfo
-from .get_usage_details import GetUsageDetails
-from .process_payment import ProcessPayment
 
 
 ALL_TOOLS = [
@@ -22,7 +19,4 @@ ALL_TOOLS = [
     GetLineDetails,
     SuspendLine,
     GetBillDetails,
-    GetCustomerInfo,
-    GetUsageDetails,
-    ProcessPayment,
 ]

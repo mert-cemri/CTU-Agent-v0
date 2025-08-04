@@ -1,4 +1,4 @@
-"""DoorDash domain rules and constraints."""
+# DoorDash domain rules and constraints – kept concise for clarity.
 
 RULES = [
     "Orders must meet minimum order requirements",
