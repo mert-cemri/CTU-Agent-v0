@@ -167,8 +167,38 @@ def calculate_per_dataset_metrics(
 
     # Calculate metrics for each data source
     for data_source, indices in data_source_indices.items():
-        # Extract subset for this data source
-        subset_generator_output = {key: [value[i] for i in indices] for key, value in concat_generator_outputs.items()}
+        # Extract subset for this data source - only process list-type fields
+        subset_generator_output = {}
+        for key, value in concat_generator_outputs.items():
+            if isinstance(value, list):
+                subset_generator_output[key] = [value[i] for i in indices]
+        
+        # Recalculate rollout_metrics for this subset if we have the necessary data
+        if "response_ids" in subset_generator_output and "rewards" in subset_generator_output:
+            responses = subset_generator_output["response_ids"]
+            rewards = subset_generator_output["rewards"]
+            
+            if len(responses) > 0:
+                num_tokens_arr = np.array([len(response) for response in responses])
+                non_zero_rewards_arr = np.array([reward > 0.0 for reward in rewards])
+                zero_rewards_arr = np.array([reward == 0.0 for reward in rewards])
+                
+                avg_tokens_non_zero_rewards = (
+                    np.mean(num_tokens_arr[non_zero_rewards_arr]) if non_zero_rewards_arr.sum() > 0 else 0
+                )
+                avg_tokens_zero_rewards = (
+                    np.mean(num_tokens_arr[zero_rewards_arr]) if zero_rewards_arr.sum() > 0 else 0
+                )
+                
+                subset_generator_output["rollout_metrics"] = {
+                    "generate/min_num_tokens": np.min(num_tokens_arr).item(),
+                    "generate/max_num_tokens": np.max(num_tokens_arr).item(),
+                    "generate/avg_num_tokens": np.mean(num_tokens_arr).item(),
+                    "generate/std_num_tokens": np.std(num_tokens_arr).item(),
+                    "generate/avg_tokens_non_zero_rewards": avg_tokens_non_zero_rewards,
+                    "generate/avg_tokens_zero_rewards": avg_tokens_zero_rewards,
+                }
+        
         subset_uids = [concat_uids[i] for i in indices]
 
         # Calculate metrics for this subset
