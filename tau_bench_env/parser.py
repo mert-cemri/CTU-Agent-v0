@@ -453,8 +453,26 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
                 if isinstance(arguments, str):
                     try:
                         arguments = json.loads(arguments)
-                    except json.JSONDecodeError:
-                        arguments = {}
+                    except json.JSONDecodeError as e:
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n⚠️  MALFORMED JSON ARGUMENTS:")
+                            print(f"   Tool: {tool_name}")
+                            print(f"   Raw arguments: {repr(arguments[:200])}")
+                            print(f"   JSON error: {e}")
+                        # Try to fix common JSON issues
+                        try:
+                            # Remove trailing garbage characters
+                            fixed_args = arguments.split(' fix all issues')[0]
+                            if not fixed_args.endswith('}'):
+                                fixed_args += '}'
+                            arguments = json.loads(fixed_args)
+                            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                                print(f"   ✓ Fixed arguments: {arguments}")
+                        except:
+                            # If still can't parse, use empty dict
+                            arguments = {}
+                            if os.environ.get("DEBUG_PARSER", "0") == "1":
+                                print(f"   Using empty arguments as fallback")
                 
                 if tool_name and tool_name in tool_names:
                     sanitized_kwargs = _validate_and_sanitize_kwargs(
@@ -478,8 +496,26 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
         if isinstance(arguments, str):
             try:
                 arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = {}
+            except json.JSONDecodeError as e:
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"\n⚠️  MALFORMED JSON ARGUMENTS (Dict function format):")
+                    print(f"   Tool: {tool_name}")
+                    print(f"   Raw arguments: {repr(arguments[:200])}")
+                    print(f"   JSON error: {e}")
+                # Try to fix common JSON issues
+                try:
+                    # Remove trailing garbage characters
+                    fixed_args = arguments.split(' fix all issues')[0]
+                    if not fixed_args.endswith('}'):
+                        fixed_args += '}'
+                    arguments = json.loads(fixed_args)
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ✓ Fixed arguments: {arguments}")
+                except:
+                    # If still can't parse, use empty dict
+                    arguments = {}
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   Using empty arguments as fallback")
         
         if tool_name and tool_name in tool_names:
             sanitized_kwargs = _validate_and_sanitize_kwargs(
@@ -502,8 +538,26 @@ def _extract_dict_tool_call(response_dict: Dict[str, Any], tool_names: set) -> O
         if isinstance(arguments, str):
             try:
                 arguments = json.loads(arguments)
-            except json.JSONDecodeError:
-                arguments = {}
+            except json.JSONDecodeError as e:
+                if os.environ.get("DEBUG_PARSER", "0") == "1":
+                    print(f"\n⚠️  MALFORMED JSON ARGUMENTS (Dict direct format):")
+                    print(f"   Tool: {tool_name}")
+                    print(f"   Raw arguments: {repr(arguments[:200])}")
+                    print(f"   JSON error: {e}")
+                # Try to fix common JSON issues
+                try:
+                    # Remove trailing garbage characters
+                    fixed_args = arguments.split(' fix all issues')[0]
+                    if not fixed_args.endswith('}'):
+                        fixed_args += '}'
+                    arguments = json.loads(fixed_args)
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   ✓ Fixed arguments: {arguments}")
+                except:
+                    # If still can't parse, use empty dict
+                    arguments = {}
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"   Using empty arguments as fallback")
         
         if tool_name and tool_name in tool_names:
             sanitized_kwargs = _validate_and_sanitize_kwargs(

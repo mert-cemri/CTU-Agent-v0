@@ -8,6 +8,7 @@ import shutil
 from loguru import logger
 import glob
 import json
+import numpy as np
 from skyrl_train.generators.utils import get_metrics_from_generator_output
 from skyrl_train.generators.base import GeneratorOutput
 from transformers import AutoTokenizer
