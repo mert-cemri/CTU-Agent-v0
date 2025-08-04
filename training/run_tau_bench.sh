@@ -18,8 +18,7 @@ EPOCHS=50
 # Model Configuration - Upgraded to more powerful 3B model
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')
-
+MODEL_NAME_SANITIZED="Qwen/Qwen2.5-3B-Instruct_v0"
 
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
