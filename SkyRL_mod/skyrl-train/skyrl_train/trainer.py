@@ -8,6 +8,7 @@ from pathlib import Path
 import ray
 import uuid
 import torch
+import numpy as np
 from loguru import logger
 from omegaconf import DictConfig
 from ray.util.placement_group import PlacementGroup, placement_group
@@ -217,6 +218,7 @@ class RayPPOTrainer:
                 retail_concat_env_extras.extend(generator_input["env_extras"])
                 retail_concat_uids.extend(uids)
             
+            pbar.close()
             retail_concat_generator_outputs: GeneratorOutput = concatenate_generator_outputs(retail_generator_outputs)
             
             # Calculate retail eval metrics
