@@ -10,6 +10,7 @@ from envs.doordash.rules import RULES
 from envs.doordash.tools import ALL_TOOLS
 from envs.doordash.wiki import WIKI
 from envs.user import UserStrategy
+from tau_types import Task
 
 
 class MockDoordashDomainEnv(Env):
@@ -22,20 +23,25 @@ class MockDoordashDomainEnv(Env):
         user_provider: Optional[str] = None,
         task_split: str = "test",
         task_index: Optional[int] = None,
+        custom_tasks: Optional[List[Task]] = None,
     ):
-        # Currently no curated DoorDash tasks – supply one placeholder so the
-        # base Env initialisation logic that picks a random task does not
-        # fail.  Replace with real tasks when available.
-        from tau_types import Task, Action
+        # Use custom tasks if provided, otherwise use placeholder
+        if custom_tasks is not None:
+            tasks = custom_tasks
+        else:
+            # Currently no curated DoorDash tasks – supply one placeholder so the
+            # base Env initialisation logic that picks a random task does not
+            # fail.  Replace with real tasks when available.
+            from tau_types import Task, Action
 
-        tasks = [
-            Task(
-                user_id="placeholder_user",
-                instruction="Placeholder DoorDash task – replace with real dataset.",
-                actions=[Action(name="think", kwargs={"thought": "placeholder"})],
-                outputs=[],
-            )
-        ]
+            tasks = [
+                Task(
+                    user_id="placeholder_user",
+                    instruction="Placeholder DoorDash task – replace with real dataset.",
+                    actions=[Action(name="think", kwargs={"thought": "placeholder"})],
+                    outputs=[],
+                )
+            ]
 
         super().__init__(
             data_load_func=load_data,
