@@ -192,11 +192,12 @@ class RayPPOTrainer:
                     "eval/instant_num_samples": len(eval_rewards),
                     "eval/instant_failure_rate": sum(1 for r in eval_rewards if r == 0) / len(eval_rewards),
                 }
-                # Log immediately
+                # Log immediately with unified counter
                 if hasattr(self, 'tracker') and self.tracker is not None:
                     try:
-                        self.tracker.log(eval_reward_metrics, step=self.global_step)
-                        logger.info(f"[Eval Step {self.global_step}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
+                        self.total_steps += 1
+                        self.tracker.log(eval_reward_metrics, step=self.total_steps)
+                        logger.info(f"[Eval Step {self.total_steps}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
                     except Exception as e:
                         logger.warning(f"Failed to log eval reward metrics: {e}")
 
@@ -265,7 +266,7 @@ class RayPPOTrainer:
         """
 
         self.global_step = 0
-        self.batch_step = 0  # Initialize fine-grained batch counter for more frequent logging
+        self.total_steps = 0  # Unified counter for all WandB logging to avoid monotonic warnings
         self.weights_manager = InferenceWeightsManager(
             self.policy_model, self.inference_engine_client, self.cfg.trainer.placement.colocate_all
         )
@@ -342,25 +343,20 @@ class RayPPOTrainer:
                     
                     # Log training rewards immediately after calculation
                     if "rewards" in training_input and len(training_input["rewards"]) > 0:
-                        self.batch_step += 1  # Increment batch counter
+                        self.total_steps += 1  # Increment unified counter
                         train_rewards = training_input["rewards"].cpu().numpy() if torch.is_tensor(training_input["rewards"]) else training_input["rewards"]
                         train_reward_metrics = {
                             "train/instant_avg_reward": float(np.mean(train_rewards)),
                             "train/instant_min_reward": float(np.min(train_rewards)),
                             "train/instant_max_reward": float(np.max(train_rewards)),
                             "train/instant_std_reward": float(np.std(train_rewards)),
-                            "train/batch_number": self.batch_step,
+                            "train/total_steps": self.total_steps,
+                            "train/global_step": self.global_step,
                         }
                         if hasattr(self, 'tracker') and self.tracker is not None:
                             try:
-                                # Log with both global_step and batch_step for dual tracking
-                                self.tracker.log(train_reward_metrics, step=self.global_step)
-                                # Also log with batch_step for finer granularity
-                                batch_metrics = {
-                                    "batch_train/avg_reward": float(np.mean(train_rewards)),
-                                    "batch_train/batch_id": self.batch_step,
-                                }
-                                self.tracker.log(batch_metrics, step=self.batch_step)
+                                # Log with unified step counter
+                                self.tracker.log(train_reward_metrics, step=self.total_steps)
                             except Exception as e:
                                 logger.debug(f"Failed to log training reward metrics: {e}")
 
@@ -406,6 +402,8 @@ class RayPPOTrainer:
                     if self.cfg.trainer.placement.colocate_all:
                         self.policy_model.backload_to_gpu()
 
+                # Sync total_steps with global_step at epoch boundaries to prevent conflicts
+                self.total_steps = max(self.total_steps, self.global_step * 100)  # Ensure total_steps is always higher
                 self.tracker.log(self.all_metrics, step=self.global_step)
                 self.all_metrics = {}
 
@@ -791,11 +789,12 @@ class RayPPOTrainer:
                 "generation/max_reward": max(rewards) if rewards else 0,
             }
             
-            # Log immediately with current global step
+            # Log immediately with unified step counter
             if hasattr(self, 'tracker') and self.tracker is not None:
                 try:
-                    self.tracker.log(generation_metrics, step=self.global_step)
-                    logger.info(f"[Step {self.global_step}] Generation rewards - Avg: {avg_reward:.3f}, Success rate: {success_rate:.3f}")
+                    self.total_steps += 1
+                    self.tracker.log(generation_metrics, step=self.total_steps)
+                    logger.info(f"[Step {self.total_steps}] Generation rewards - Avg: {avg_reward:.3f}, Success rate: {success_rate:.3f}")
                 except Exception as e:
                     logger.warning(f"Failed to log generation metrics: {e}")
 
@@ -850,23 +849,21 @@ class RayPPOTrainer:
         if hasattr(self, 'tracker') and self.tracker is not None:
             # wandb.step should correspond to trainer global_step
             try:
-                # Log both at current step and with a more granular counter
+                # Log main reward metrics with global_step (epoch-level)
                 self.tracker.log(reward_metrics, step=self.global_step)
                 
-                # Also log with a batch counter for more granular tracking
-                if not hasattr(self, 'batch_counter'):
-                    self.batch_counter = 0
-                self.batch_counter += 1
+                # Also log batch metrics with unified counter
+                self.total_steps += 1
                 
                 batch_metrics = {
                     f"batch_reward/avg_pass_at_{n_samples_per_prompt}": pass_at_n,
                     "batch_reward/avg_raw_reward": mean_raw_reward,
                     "batch_reward/parse_failure_rate": parse_failure_rate,
-                    "batch_reward/batch_number": self.batch_counter,
+                    "batch_reward/total_steps": self.total_steps,
                     "batch_reward/global_step": self.global_step,
                 }
-                # Log with batch_counter as step for more frequent updates
-                self.tracker.log(batch_metrics, step=self.batch_counter)
+                # Log with unified step counter
+                self.tracker.log(batch_metrics, step=self.total_steps)
             except Exception as e:
                 logger.warning(f"Early reward logging failed: {e}")
 
