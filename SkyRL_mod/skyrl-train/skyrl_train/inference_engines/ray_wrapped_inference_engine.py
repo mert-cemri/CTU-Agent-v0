@@ -73,10 +73,11 @@ def create_ray_wrapped_inference_engines(
     Create a list of RayWrappedInferenceEngine instances wrapping Ray actor handles to InferenceEngineInterface instances.
     """
     import vllm
+    from packaging.version import Version
     from skyrl_train.inference_engines.vllm.vllm_engine import VLLMRayActor, AsyncVLLMRayActor
     from skyrl_train.utils import ray_noset_visible_devices, get_all_env_variables, get_ray_pg_ready_with_timeout
 
-    assert vllm.__version__ >= "0.8.3", "SkyTrainer only supports vLLM >= 0.8.3"
+    assert Version(vllm.__version__) >= Version("0.8.3"), f"SkyTrainer only supports vLLM >= 0.8.3, got {vllm.__version__}"
     inference_engine_actors = []
     noset_visible_devices = ray_noset_visible_devices(ray.get(get_all_env_variables.remote()))
     # NOTE: we use the ray backend for tensor parallel size > 1 to explicitly manage resource allocation

@@ -10,6 +10,7 @@ from torch.distributed import destroy_process_group
 from skyrl_train.distributed.utils import init_custom_process_group
 from uuid import uuid4
 import warnings
+from packaging.version import Version
 from skyrl_train.inference_engines.base import (
     InferenceEngineInterface,
     InferenceEngineInput,
@@ -133,7 +134,7 @@ class BaseVLLMInferenceEngine(InferenceEngineInterface):
     def __init__(self, *args, bundle_indices: list = None, **kwargs):
         setup_envvars_for_vllm(kwargs, bundle_indices)
         vllm_v1_disable_multiproc = kwargs.pop("vllm_v1_disable_multiproc", False)
-        if vllm_v1_disable_multiproc or vllm.__version__ == "0.8.2":
+        if vllm_v1_disable_multiproc or Version(vllm.__version__) == Version("0.8.2"):
             # https://github.com/vllm-project/vllm/blob/effc5d24fae10b29996256eb7a88668ff7941aed/examples/offline_inference/reproduciblity.py#L11
             os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
 
