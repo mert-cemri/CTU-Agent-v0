@@ -181,6 +181,24 @@ class RayPPOTrainer:
                 f"eval/all/pass_at_{self.cfg.generator.eval_n_samples_per_prompt}": overall_pass_at_n,
             }
         )
+        
+        # Log evaluation rewards immediately for better visibility
+        if "rewards" in concat_generator_outputs:
+            eval_rewards = concat_generator_outputs["rewards"]
+            if eval_rewards:
+                eval_reward_metrics = {
+                    "eval/instant_avg_reward": sum(eval_rewards) / len(eval_rewards),
+                    "eval/instant_success_rate": sum(1 for r in eval_rewards if r > 0) / len(eval_rewards),
+                    "eval/instant_num_samples": len(eval_rewards),
+                    "eval/instant_failure_rate": sum(1 for r in eval_rewards if r == 0) / len(eval_rewards),
+                }
+                # Log immediately
+                if hasattr(self, 'tracker') and self.tracker is not None:
+                    try:
+                        self.tracker.log(eval_reward_metrics, step=self.global_step)
+                        logger.info(f"[Eval Step {self.global_step}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
+                    except Exception as e:
+                        logger.warning(f"Failed to log eval reward metrics: {e}")
 
         # 4. Prepare dumping data
         if self.cfg.trainer.dump_eval_results:
@@ -247,6 +265,7 @@ class RayPPOTrainer:
         """
 
         self.global_step = 0
+        self.batch_step = 0  # Initialize fine-grained batch counter for more frequent logging
         self.weights_manager = InferenceWeightsManager(
             self.policy_model, self.inference_engine_client, self.cfg.trainer.placement.colocate_all
         )
@@ -320,6 +339,30 @@ class RayPPOTrainer:
                     # 1.4 inference and calculate values, log probs, rewards, kl divergence
                     with Timer("fwd_logprobs_values_reward", self.all_timings):
                         training_input = self.fwd_logprobs_values_reward(training_input)
+                    
+                    # Log training rewards immediately after calculation
+                    if "rewards" in training_input and len(training_input["rewards"]) > 0:
+                        self.batch_step += 1  # Increment batch counter
+                        train_rewards = training_input["rewards"].cpu().numpy() if torch.is_tensor(training_input["rewards"]) else training_input["rewards"]
+                        train_reward_metrics = {
+                            "train/instant_avg_reward": float(np.mean(train_rewards)),
+                            "train/instant_min_reward": float(np.min(train_rewards)),
+                            "train/instant_max_reward": float(np.max(train_rewards)),
+                            "train/instant_std_reward": float(np.std(train_rewards)),
+                            "train/batch_number": self.batch_step,
+                        }
+                        if hasattr(self, 'tracker') and self.tracker is not None:
+                            try:
+                                # Log with both global_step and batch_step for dual tracking
+                                self.tracker.log(train_reward_metrics, step=self.global_step)
+                                # Also log with batch_step for finer granularity
+                                batch_metrics = {
+                                    "batch_train/avg_reward": float(np.mean(train_rewards)),
+                                    "batch_train/batch_id": self.batch_step,
+                                }
+                                self.tracker.log(batch_metrics, step=self.batch_step)
+                            except Exception as e:
+                                logger.debug(f"Failed to log training reward metrics: {e}")
 
                     # 1.5 apply kl divergence penalty to rewards
                     if self.cfg.trainer.algorithm.use_kl_in_reward:
@@ -734,6 +777,28 @@ class RayPPOTrainer:
         if generator_output["rollout_metrics"] is not None:
             self.all_metrics.update(generator_output["rollout_metrics"])
 
+        # Log generation rewards immediately for better visibility
+        if "rewards" in generator_output and len(generator_output["rewards"]) > 0:
+            rewards = generator_output["rewards"]
+            avg_reward = sum(rewards) / len(rewards) if rewards else 0
+            success_rate = sum(1 for r in rewards if r > 0) / len(rewards) if rewards else 0
+            
+            generation_metrics = {
+                "generation/avg_reward": avg_reward,
+                "generation/success_rate": success_rate,
+                "generation/num_samples": len(rewards),
+                "generation/min_reward": min(rewards) if rewards else 0,
+                "generation/max_reward": max(rewards) if rewards else 0,
+            }
+            
+            # Log immediately with current global step
+            if hasattr(self, 'tracker') and self.tracker is not None:
+                try:
+                    self.tracker.log(generation_metrics, step=self.global_step)
+                    logger.info(f"[Step {self.global_step}] Generation rewards - Avg: {avg_reward:.3f}, Success rate: {success_rate:.3f}")
+                except Exception as e:
+                    logger.warning(f"Failed to log generation metrics: {e}")
+
         if len(generator_output["response_ids"]) <= 0:
             raise RuntimeError("No outputs generated")
 
@@ -798,8 +863,10 @@ class RayPPOTrainer:
                     "batch_reward/avg_raw_reward": mean_raw_reward,
                     "batch_reward/parse_failure_rate": parse_failure_rate,
                     "batch_reward/batch_number": self.batch_counter,
+                    "batch_reward/global_step": self.global_step,
                 }
-                self.tracker.log(batch_metrics)
+                # Log with batch_counter as step for more frequent updates
+                self.tracker.log(batch_metrics, step=self.batch_counter)
             except Exception as e:
                 logger.warning(f"Early reward logging failed: {e}")
 
