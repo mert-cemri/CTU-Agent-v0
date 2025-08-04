@@ -25,6 +25,12 @@ CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
 DATA_DIR="data/tau_bench_retail"
 
 mkdir -p $DATA_DIR
+
+# Clean up existing checkpoints for fresh start
+if [ -d "$CKPT_DIR" ]; then
+    echo "Removing existing checkpoints at: $CKPT_DIR"
+    rm -rf "$CKPT_DIR"
+fi
 mkdir -p $CKPT_DIR
 
 # # Environment variables
@@ -96,7 +102,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \
   trainer.run_name="tau_bench_qwen2_5_3b_$(date +%Y%m%d_%H%M%S)" \
-  trainer.resume_mode=latest \
+  trainer.resume_mode=none \
   $@
 
 echo "Training completed!"

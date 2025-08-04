@@ -72,7 +72,7 @@ def concatenate_generator_outputs(generator_outputs: List[GeneratorOutput]) -> G
     """
     Used in eval to concatenate the generator outputs of multiple batches.
 
-    `rollout_metrics` are not concatenated because they are already aggregated.
+    `rollout_metrics` are recalculated from the concatenated data.
     """
     assert len(generator_outputs) > 0
     result: GeneratorOutput = {
@@ -83,5 +83,31 @@ def concatenate_generator_outputs(generator_outputs: List[GeneratorOutput]) -> G
     }
     if "stop_reasons" in generator_outputs[0]:
         result["stop_reasons"] = sum([output["stop_reasons"] for output in generator_outputs], [])
+    
+    # Recalculate rollout_metrics from concatenated data
+    responses = result["response_ids"]
+    rewards = result["rewards"]
+    
+    num_tokens_arr = np.array([len(response) for response in responses])
+    non_zero_rewards_arr = np.array([reward > 0.0 for reward in rewards])
+    zero_rewards_arr = np.array([reward == 0.0 for reward in rewards])
+    
+    # average tokens for non zero rewards
+    avg_tokens_non_zero_rewards = (
+        np.mean(num_tokens_arr[non_zero_rewards_arr]) if non_zero_rewards_arr.sum() > 0 else np.zeros(1)
+    )
+    # average tokens for zero rewards
+    avg_tokens_zero_rewards = (
+        np.mean(num_tokens_arr[zero_rewards_arr]) if zero_rewards_arr.sum() > 0 else np.zeros(1)
+    )
+    
+    result["rollout_metrics"] = {
+        "generate/min_num_tokens": np.min(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+        "generate/max_num_tokens": np.max(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+        "generate/avg_num_tokens": np.mean(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+        "generate/std_num_tokens": np.std(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+        "generate/avg_tokens_non_zero_rewards": avg_tokens_non_zero_rewards.item(),
+        "generate/avg_tokens_zero_rewards": avg_tokens_zero_rewards.item(),
+    }
 
     return result
