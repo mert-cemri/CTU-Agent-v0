@@ -18,7 +18,7 @@ EPOCHS=50
 # Model Configuration - Upgraded to more powerful 3B model
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v1-multi-domain
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v2-multi-domain
 
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
@@ -36,7 +36,7 @@ mkdir -p $CKPT_DIR
 # # Environment variables
 export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
-export DEBUG_PARSER=1
+export DEBUG_PARSER=0
 
 # Ray environment variable for UV support
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
@@ -50,7 +50,8 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 # Kill any existing Ray processes to ensure clean start
 ray stop || true
 
-HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
+# HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
+python main_tau_bench.py \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   trainer.policy.model.path="$POLICY_MODEL" \
