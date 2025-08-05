@@ -109,14 +109,6 @@ class Tracking:
         for default_backend, logger_instance in self.logger.items():
             if backend is None or default_backend in backend:
                 logger_instance.log(data=data, step=step)
-                # Force flush for wandb to ensure immediate updates
-                if default_backend == "wandb":
-                    try:
-                        # WandB's log is asynchronous, force sync for reward metrics
-                        if any("reward" in key or "batch" in key for key in data.keys()):
-                            logger_instance.log({}, commit=True)  # Force commit
-                    except:
-                        pass  # Ignore flush errors
 
     def __del__(self):
         # NOTE (sumanthrh): We use a try-except block here while finishing tracking.

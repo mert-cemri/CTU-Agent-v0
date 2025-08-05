@@ -1,10 +1,45 @@
-# SkyRL Repository Changes for Native Tool Calling Implementation
+# SkyRL Repository Changes for CTU-Agent-v0 Training Framework
 
-This document lists all changes made to the SkyRL repository (`SkyRL_mod/skyrl-train/`) to implement native VLLM tool calling functionality.
+This document lists all changes made to the SkyRL repository (`SkyRL_mod/skyrl-train/`) to support the CTU-Agent-v0 multi-domain training framework.
 
 ## Overview of Changes
 
-The implementation adds optional native tool calling support to SkyRL's VLLM inference engines, allowing them to use VLLM's `chat()` method with structured tool calling instead of text-based parsing. All changes maintain backward compatibility.
+The implementation includes native VLLM tool calling, multi-domain training support, improved WandB logging, and robust error handling. All changes maintain backward compatibility.
+
+## Latest Changes (Section 15): Simplified WandB Logging System
+
+### Problem
+Only generation metrics were appearing in WandB despite multiple logging attempts throughout the training loop. The system had 9 separate `total_steps` increments per training iteration, causing step count inflation and logging failures.
+
+### Solution
+Replaced fragmented logging with unified collection system:
+
+```python
+# Before: Multiple increments and individual logging attempts
+self.total_steps += 1  # 9 different locations
+self.tracker.log(metrics, step=self.total_steps)
+
+# After: Single collection and unified logging
+self.all_metrics.update(metrics)  # Collect all metrics
+self.tracker.log(self.all_metrics, step=self.global_step)  # Log once per step
+```
+
+### Files Changed
+- **`trainer.py`**: Removed `total_steps` counter, unified all metric collection into `self.all_metrics`, single logging call per training step using `global_step`
+
+### Metrics Now Properly Logged
+- **Generation metrics**: `generation/avg_reward`, `generation/success_rate`
+- **Training metrics**: `train/avg_reward`, `train/min_reward`, `train/max_reward`
+- **Batch metrics**: `reward/avg_raw_reward`, `reward/parse_failure_rate`
+- **Evaluation metrics**: `eval/all/avg_score`, `eval-retail/success_rate`
+- **Test metrics**: `test-retail/average_reward`, `test-airline/average_reward`
+- **Loss metrics**: `loss/avg_raw_rewards`, `loss/avg_raw_advantages`
+- **Timing metrics**: `timing/step`, `timing/generate`
+
+### Logging Frequency
+- **Every training step**: Generation, training, batch, loss, timing metrics
+- **Every eval_interval (5 steps)**: Evaluation and test metrics  
+- **Global step**: Single monotonic counter aligned with actual training progress
 
 ---
 
@@ -686,3 +721,301 @@ This fix ensures that:
 4. `response_ids` extraction succeeds instead of returning empty arrays
 
 This should resolve the final blocker preventing training from proceeding.
+
+---
+
+## 10. Multi-Domain Training Support
+
+### Files Modified:
+- `skyrl_train/trainer.py`
+- `skyrl_train/entrypoints/main_base.py`
+- `skyrl_train/utils/trainer_utils.py`
+
+### Changes Made:
+
+#### A. Retail Validation Dataset Support (`trainer.py`)
+
+**ADDED** method to set retail validation dataset:
+```python
+def set_retail_eval_dataset(self, retail_eval_dataset: Optional[PromptDataset]):
+    """Set the retail validation dataset for multi-domain training evaluation."""
+    self.retail_eval_dataset = retail_eval_dataset
+    self.retail_eval_dataloader = self.build_dataloader(retail_eval_dataset, is_train=False) if retail_eval_dataset is not None else None
+```
+
+**MODIFIED** `eval()` method to evaluate retail validation set separately:
+```python
+# 5. Evaluate on retail validation set if available
+if hasattr(self, 'retail_eval_dataloader') and self.retail_eval_dataloader is not None:
+    logger.info("Evaluating on retail validation set...")
+    # ... evaluation logic ...
+    retail_eval_metrics = {
+        "eval-retail/average_reward": np.mean(retail_rewards),
+        "eval-retail/success_rate": np.mean([r > 0 for r in retail_rewards]),
+        "eval-retail/num_samples": len(retail_rewards),
+    }
+```
+
+#### B. Test Dataset Support
+
+**ADDED** method to load test datasets (`main_base.py`):
+```python
+def get_test_datasets(self):
+    """Load test datasets for evaluation.
+    
+    Returns:
+        dict: Dictionary mapping test set names to PromptDataset objects
+    """
+    test_datasets = {}
+    if (self.cfg.trainer.eval_interval > 0 and 
+        hasattr(self.cfg.data, 'test_data') and 
+        self.cfg.data.test_data):
+        
+        for name, path in self.cfg.data.test_data.items():
+            if path and os.path.exists(path):
+                test_dataset = PromptDataset(
+                    [path],
+                    self.tokenizer,
+                    self.cfg.trainer.max_prompt_length,
+                    num_processors=8,
+                )
+                test_datasets[name] = test_dataset
+```
+
+**ADDED** method to set test datasets (`trainer.py`):
+```python
+def set_test_datasets(self, test_datasets: Dict[str, PromptDataset]):
+    """Set test datasets for evaluation during training."""
+    self.test_datasets = test_datasets
+    self.test_dataloaders = {}
+    for name, dataset in test_datasets.items():
+        self.test_dataloaders[name] = self.build_dataloader(dataset, is_train=False)
+```
+
+**MODIFIED** `eval()` method to evaluate test sets:
+```python
+# 6. Evaluate on test sets if available
+if hasattr(self, 'test_dataloaders') and self.test_dataloaders:
+    logger.info(f"Evaluating on {len(self.test_dataloaders)} test sets...")
+    
+    for test_name, test_dataloader in self.test_dataloaders.items():
+        # ... evaluation logic ...
+        test_metrics = {
+            f"test-{test_name}/average_reward": float(np.mean(test_rewards)),
+            f"test-{test_name}/success_rate": float(np.mean([r > 0 for r in test_rewards])),
+            f"test-{test_name}/num_samples": len(test_rewards),
+        }
+```
+
+#### C. Per-Dataset Metrics (`trainer_utils.py`)
+
+**ADDED** function to calculate metrics per data source:
+```python
+def calculate_per_dataset_metrics(
+    concat_generator_outputs: GeneratorOutput,
+    concat_uids: List[str],
+    concat_data_sources: List[str],
+    n_samples_per_prompt: int,
+) -> Dict[str, float]:
+    """Calculate metrics per data source."""
+    # Group indices by data source
+    data_source_indices = {}
+    for i, data_source in enumerate(concat_data_sources):
+        if data_source not in data_source_indices:
+            data_source_indices[data_source] = []
+        data_source_indices[data_source].append(i)
+    
+    # Calculate metrics for each data source
+    for data_source, indices in data_source_indices.items():
+        # ... metric calculation ...
+```
+
+### Reasons for Changes:
+- Support training on multiple domains with separate validation sets
+- Track performance on domain-specific test sets during training
+- Enable fine-grained analysis of model performance per domain
+
+---
+
+## 11. WandB Logging Improvements
+
+### Files Modified:
+- `skyrl_train/trainer.py`
+- `skyrl_train/utils/tracking.py`
+
+### Changes Made:
+
+#### A. Unified Step Counter
+
+**Problem**: Mixed use of `global_step`, `batch_counter`, and `batch_step` caused WandB monotonic step warnings
+
+**Solution**: Introduced unified `total_steps` counter:
+```python
+# In train() method
+self.global_step = 0
+self.total_steps = 0  # Unified counter for all WandB logging
+
+# All logging now uses total_steps
+self.tracker.log(metrics, step=self.total_steps)
+```
+
+**MODIFIED** all logging calls to use `total_steps`:
+- Main eval logging: `step=self.total_steps`
+- Training metrics: `step=self.total_steps`
+- Reward metrics: `step=self.total_steps`
+- Test metrics: `step=self.total_steps`
+
+#### B. More Frequent Reward Logging
+
+**ADDED** generation-time logging:
+```python
+# Log generation rewards immediately for better visibility
+if "rewards" in generator_output and len(generator_output["rewards"]) > 0:
+    rewards = generator_output["rewards"]
+    generation_metrics = {
+        "generation/avg_reward": avg_reward,
+        "generation/success_rate": success_rate,
+        "generation/num_samples": len(rewards),
+        "generation/min_reward": min(rewards),
+        "generation/max_reward": max(rewards),
+    }
+    self.tracker.log(generation_metrics, step=self.total_steps)
+```
+
+**ADDED** training batch logging:
+```python
+# Log training rewards immediately after calculation
+if "rewards" in training_input and len(training_input["rewards"]) > 0:
+    self.total_steps += 1
+    train_rewards = training_input["rewards"].cpu().numpy()
+    train_reward_metrics = {
+        "train/instant_avg_reward": float(np.mean(train_rewards)),
+        "train/instant_min_reward": float(np.min(train_rewards)),
+        "train/instant_max_reward": float(np.max(train_rewards)),
+        "train/instant_std_reward": float(np.std(train_rewards)),
+    }
+    self.tracker.log(train_reward_metrics, step=self.total_steps)
+```
+
+**ADDED** evaluation instant logging:
+```python
+# Log evaluation rewards immediately for better visibility
+eval_reward_metrics = {
+    "eval/instant_avg_reward": sum(eval_rewards) / len(eval_rewards),
+    "eval/instant_success_rate": sum(1 for r in eval_rewards if r > 0) / len(eval_rewards),
+    "eval/instant_num_samples": len(eval_rewards),
+    "eval/instant_failure_rate": sum(1 for r in eval_rewards if r == 0) / len(eval_rewards),
+}
+```
+
+#### C. Removed Aggressive WandB Flushing
+
+**REMOVED** force commit logic in `tracking.py`:
+```python
+# Removed this problematic code:
+# if any("reward" in key or "batch" in key for key in data.keys()):
+#     logger_instance.log({}, commit=True)  # Force commit
+```
+
+### Impact:
+- Eliminated "step X is less than current step Y" warnings
+- Reward metrics now appear frequently throughout training
+- All metrics on unified timeline in WandB dashboard
+
+---
+
+## 12. Error Handling Improvements
+
+### Files Modified:
+- `skyrl_train/trainer.py`
+- `skyrl_train/generators/utils.py`
+- `skyrl_train/utils/trainer_utils.py`
+
+### Changes Made:
+
+#### A. Empty Response Handling (`trainer.py`)
+
+**ADDED** filtering for empty responses:
+```python
+# Filter out empty responses
+valid_indices = [i for i, r in enumerate(generator_output["response_ids"]) if len(r) > 0]
+
+if len(valid_indices) < len(uids):
+    empty_count = len(uids) - len(valid_indices)
+    logger.warning(f"Found {empty_count} empty responses out of {len(uids)} total")
+```
+
+#### B. Parse Failure Tracking (`trainer.py`)
+
+**ADDED** parse failure rate calculation:
+```python
+# Calculate parse failure rate (assuming 0 reward means failure)
+parse_failures = sum(1 for r in rewards if r == 0)
+parse_failure_rate = parse_failures / len(rewards) if rewards else 0
+
+reward_metrics = {
+    "reward/parse_failure_rate": parse_failure_rate,
+}
+```
+
+#### C. Rollout Metrics Recalculation (`generators/utils.py`)
+
+**FIXED** missing rollout_metrics in concatenate_generator_outputs:
+```python
+# Recalculate rollout_metrics from concatenated data
+result["rollout_metrics"] = {
+    "generate/min_num_tokens": np.min(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+    "generate/max_num_tokens": np.max(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+    "generate/avg_num_tokens": np.mean(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+    "generate/std_num_tokens": np.std(num_tokens_arr).item() if len(num_tokens_arr) > 0 else 0,
+    "generate/avg_tokens_non_zero_rewards": avg_tokens_non_zero_rewards.item(),
+    "generate/avg_tokens_zero_rewards": avg_tokens_zero_rewards.item(),
+}
+```
+
+#### D. Dict/List Type Handling (`trainer_utils.py`)
+
+**FIXED** type mismatch in calculate_per_dataset_metrics:
+```python
+# Extract subset for this data source - only process list-type fields
+subset_generator_output = {}
+for key, value in concat_generator_outputs.items():
+    if isinstance(value, list):
+        subset_generator_output[key] = [value[i] for i in indices]
+
+# Recalculate rollout_metrics for this subset if we have the necessary data
+if "response_ids" in subset_generator_output and "rewards" in subset_generator_output:
+    # ... recalculation logic ...
+```
+
+---
+
+## 13. Import Fixes
+
+### File Modified:
+- `skyrl_train/utils/trainer_utils.py`
+
+### Change:
+**ADDED** missing numpy import:
+```python
+import numpy as np
+```
+
+### Reason:
+Fixed `NameError: name 'np' is not defined` in calculate_per_dataset_metrics
+
+---
+
+## Summary of All Changes
+
+The SkyRL framework has been extensively enhanced to support:
+
+1. **Native VLLM Tool Calling**: Full integration with VLLM's chat() method for structured tool calling
+2. **Multi-Domain Training**: Support for training on multiple domains with separate validation sets
+3. **Test Set Evaluation**: Automatic evaluation on test sets during training
+4. **Improved Logging**: Unified step counter with frequent reward updates
+5. **Better Error Handling**: Graceful handling of empty responses and parsing failures
+6. **Version Compatibility**: Fixed vLLM version checking
+7. **Type Safety**: Fixed type mismatches in metrics calculation
+
+All changes maintain backward compatibility and can be disabled through configuration.

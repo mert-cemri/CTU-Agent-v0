@@ -80,6 +80,10 @@ class RayPPOTrainer:
         # Second validation set (e.g., retail validation for multi-domain training)
         self.retail_eval_dataset = None
         self.retail_eval_dataloader = None
+        
+        # Test datasets for evaluation during training
+        self.test_datasets = {}
+        self.test_dataloaders = {}
 
         self.resume_mode = ResumeMode(cfg.trainer.resume_mode)
 
@@ -129,6 +133,18 @@ class RayPPOTrainer:
         """Set the retail validation dataset for multi-domain training evaluation."""
         self.retail_eval_dataset = retail_eval_dataset
         self.retail_eval_dataloader = self.build_dataloader(retail_eval_dataset, is_train=False) if retail_eval_dataset is not None else None
+    
+    def set_test_datasets(self, test_datasets: Dict[str, PromptDataset]):
+        """Set test datasets for evaluation during training.
+        
+        Args:
+            test_datasets: Dictionary mapping test set names to PromptDataset objects
+        """
+        self.test_datasets = test_datasets
+        self.test_dataloaders = {}
+        for name, dataset in test_datasets.items():
+            self.test_dataloaders[name] = self.build_dataloader(dataset, is_train=False)
+            logger.info(f"Added test dataset '{name}' with {len(dataset)} examples")
 
     @torch.no_grad()
     async def eval(self) -> Dict[str, float]:
@@ -195,8 +211,7 @@ class RayPPOTrainer:
                 # Log immediately with unified counter
                 if hasattr(self, 'tracker') and self.tracker is not None:
                     try:
-                        self.total_steps += 1
-                        self.tracker.log(eval_reward_metrics, step=self.total_steps)
+                        self.all_metrics.update(eval_reward_metrics)
                         logger.info(f"[Eval Step {self.total_steps}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
                     except Exception as e:
                         logger.warning(f"Failed to log eval reward metrics: {e}")
@@ -255,7 +270,79 @@ class RayPPOTrainer:
             # Merge retail metrics into main eval_metrics
             eval_metrics.update(retail_eval_metrics)
 
-        # 6. Restore self.all_metrics
+        # 6. Evaluate on test sets if available
+        if hasattr(self, 'test_dataloaders') and self.test_dataloaders:
+            logger.info(f"Evaluating on {len(self.test_dataloaders)} test sets...")
+            
+            for test_name, test_dataloader in self.test_dataloaders.items():
+                test_generator_outputs = []
+                test_concat_all_envs = []
+                test_concat_env_extras = []
+                test_concat_uids = []
+                test_concat_data_sources = []
+                
+                pbar = tqdm(total=len(test_dataloader), initial=0, desc=f"{test_name.capitalize()} Test Progress")
+                for _, prompts in enumerate(test_dataloader):
+                    pbar.update(1)
+                    generator_input, uids = self._prepare_generator_input(
+                        self.cfg.generator.eval_n_samples_per_prompt, prompts, sampling_params
+                    )
+                    generator_output: GeneratorOutput = await self.generate(generator_input)
+                    test_generator_outputs.append(generator_output)
+                    test_concat_all_envs.extend(generator_input["env_classes"])
+                    test_concat_env_extras.extend(generator_input["env_extras"])
+                    test_concat_uids.extend(uids)
+                    # Add data source for test set
+                    test_concat_data_sources.extend([test_name] * len(uids))
+                
+                pbar.close()
+                test_concat_generator_outputs: GeneratorOutput = concatenate_generator_outputs(test_generator_outputs)
+                
+                # Calculate test set metrics
+                test_rewards = test_concat_generator_outputs["rewards"]
+                test_metrics = {
+                    f"test-{test_name}/average_reward": float(np.mean(test_rewards)),
+                    f"test-{test_name}/success_rate": float(np.mean([r > 0 for r in test_rewards])),
+                    f"test-{test_name}/num_samples": len(test_rewards),
+                    f"test-{test_name}/min_reward": float(np.min(test_rewards)) if test_rewards else 0,
+                    f"test-{test_name}/max_reward": float(np.max(test_rewards)) if test_rewards else 0,
+                }
+                
+                # Add rollout metrics with test prefix
+                if test_concat_generator_outputs.get("rollout_metrics"):
+                    for key, value in test_concat_generator_outputs["rollout_metrics"].items():
+                        test_metrics[f"test-{test_name}/{key}"] = value
+                
+                # Log test metrics immediately for visibility
+                if hasattr(self, 'tracker') and self.tracker is not None:
+                    try:
+                        self.all_metrics.update(test_metrics)
+                        logger.info(f"[Test {test_name}] Average: {test_metrics[f'test-{test_name}/average_reward']:.3f}, Success: {test_metrics[f'test-{test_name}/success_rate']:.3f}")
+                    except Exception as e:
+                        logger.warning(f"Failed to log test metrics: {e}")
+                
+                # Merge test metrics into main eval_metrics
+                eval_metrics.update(test_metrics)
+                
+                # Dump test results if configured
+                if self.cfg.trainer.dump_eval_results:
+                    test_save_dir = (
+                        Path(self.cfg.trainer.export_path) / "dumped_evals" / 
+                        f"global_step_{self.global_step}_evals" / f"test_{test_name}"
+                    )
+                    test_save_dir.mkdir(parents=True, exist_ok=True)
+                    dump_per_dataset_eval_results(
+                        test_save_dir,
+                        self.tokenizer,
+                        test_concat_generator_outputs,
+                        test_concat_data_sources,
+                        test_concat_all_envs,
+                        test_concat_env_extras,
+                        test_metrics,
+                    )
+                    logger.info(f"Dumped test results for {test_name} to {test_save_dir}")
+
+        # 7. Restore self.all_metrics
         self.all_metrics = all_metrics_copy
 
         return eval_metrics
@@ -266,7 +353,6 @@ class RayPPOTrainer:
         """
 
         self.global_step = 0
-        self.total_steps = 0  # Unified counter for all WandB logging to avoid monotonic warnings
         self.weights_manager = InferenceWeightsManager(
             self.policy_model, self.inference_engine_client, self.cfg.trainer.placement.colocate_all
         )
@@ -291,6 +377,7 @@ class RayPPOTrainer:
             with self.eval_weights_manager:
                 with Timer("eval", self.all_timings):
                     eval_metrics = asyncio.run(self.eval())
+                    # Log eval metrics immediately
                     self.tracker.log(eval_metrics, step=self.global_step)
             # Policy model is backloaded to GPU after eval
             if self.cfg.trainer.placement.colocate_all:
@@ -343,22 +430,14 @@ class RayPPOTrainer:
                     
                     # Log training rewards immediately after calculation
                     if "rewards" in training_input and len(training_input["rewards"]) > 0:
-                        self.total_steps += 1  # Increment unified counter
                         train_rewards = training_input["rewards"].cpu().numpy() if torch.is_tensor(training_input["rewards"]) else training_input["rewards"]
                         train_reward_metrics = {
-                            "train/instant_avg_reward": float(np.mean(train_rewards)),
-                            "train/instant_min_reward": float(np.min(train_rewards)),
-                            "train/instant_max_reward": float(np.max(train_rewards)),
-                            "train/instant_std_reward": float(np.std(train_rewards)),
-                            "train/total_steps": self.total_steps,
-                            "train/global_step": self.global_step,
+                            "train/avg_reward": float(np.mean(train_rewards)),
+                            "train/min_reward": float(np.min(train_rewards)),
+                            "train/max_reward": float(np.max(train_rewards)),
+                            "train/std_reward": float(np.std(train_rewards)),
                         }
-                        if hasattr(self, 'tracker') and self.tracker is not None:
-                            try:
-                                # Log with unified step counter
-                                self.tracker.log(train_reward_metrics, step=self.total_steps)
-                            except Exception as e:
-                                logger.debug(f"Failed to log training reward metrics: {e}")
+                        self.all_metrics.update(train_reward_metrics)
 
                     # 1.5 apply kl divergence penalty to rewards
                     if self.cfg.trainer.algorithm.use_kl_in_reward:
@@ -402,10 +481,11 @@ class RayPPOTrainer:
                     if self.cfg.trainer.placement.colocate_all:
                         self.policy_model.backload_to_gpu()
 
-                # Sync total_steps with global_step at epoch boundaries to prevent conflicts
-                self.total_steps = max(self.total_steps, self.global_step * 100)  # Ensure total_steps is always higher
-                self.tracker.log(self.all_metrics, step=self.global_step)
-                self.all_metrics = {}
+                # Log all metrics once per training step
+                if self.all_metrics:
+                    self.tracker.log(self.all_metrics, step=self.global_step)
+                    logger.info(f"[Step {self.global_step}] Logged {len(self.all_metrics)} metrics")
+                    self.all_metrics = {}
 
                 if self.cfg.trainer.ckpt_interval > 0 and self.global_step % self.cfg.trainer.ckpt_interval == 0:
                     with Timer("save_checkpoints", self.all_timings):
@@ -414,8 +494,9 @@ class RayPPOTrainer:
                     with Timer("save_hf_model", self.all_timings):
                         self.save_models()
 
-                self.tracker.log({"timing/" + k: v for k, v in self.all_timings.items()}, step=self.global_step)
-                self.all_timings = {}
+                if self.all_timings:
+                    self.tracker.log({"timing/" + k: v for k, v in self.all_timings.items()}, step=self.global_step)
+                    self.all_timings = {}
 
                 # update progress bar after logging
                 pbar.update(1)
@@ -789,14 +870,9 @@ class RayPPOTrainer:
                 "generation/max_reward": max(rewards) if rewards else 0,
             }
             
-            # Log immediately with unified step counter
-            if hasattr(self, 'tracker') and self.tracker is not None:
-                try:
-                    self.total_steps += 1
-                    self.tracker.log(generation_metrics, step=self.total_steps)
-                    logger.info(f"[Step {self.total_steps}] Generation rewards - Avg: {avg_reward:.3f}, Success rate: {success_rate:.3f}")
-                except Exception as e:
-                    logger.warning(f"Failed to log generation metrics: {e}")
+            # Add to main metrics collection
+            self.all_metrics.update(generation_metrics)
+            logger.info(f"Generation rewards - Avg: {avg_reward:.3f}, Success rate: {success_rate:.3f}")
 
         if len(generator_output["response_ids"]) <= 0:
             raise RuntimeError("No outputs generated")
@@ -839,33 +915,14 @@ class RayPPOTrainer:
         parse_failures = sum(1 for r in rewards if r == 0)
         parse_failure_rate = parse_failures / len(rewards) if rewards else 0
 
+        # Add reward and batch metrics to main collection
         reward_metrics = {
-            f"reward/avg_pass_at_{n_samples_per_prompt}": pass_at_n,
+            f"reward/pass_at_{n_samples_per_prompt}": pass_at_n,
             "reward/avg_raw_reward": mean_raw_reward,
             "reward/parse_failure_rate": parse_failure_rate,
+            "reward/global_step": self.global_step,
         }
         self.all_metrics.update(reward_metrics)
-        # Log rewards immediately so they are not lost if later stages fail
-        if hasattr(self, 'tracker') and self.tracker is not None:
-            # wandb.step should correspond to trainer global_step
-            try:
-                # Log main reward metrics with global_step (epoch-level)
-                self.tracker.log(reward_metrics, step=self.global_step)
-                
-                # Also log batch metrics with unified counter
-                self.total_steps += 1
-                
-                batch_metrics = {
-                    f"batch_reward/avg_pass_at_{n_samples_per_prompt}": pass_at_n,
-                    "batch_reward/avg_raw_reward": mean_raw_reward,
-                    "batch_reward/parse_failure_rate": parse_failure_rate,
-                    "batch_reward/total_steps": self.total_steps,
-                    "batch_reward/global_step": self.global_step,
-                }
-                # Log with unified step counter
-                self.tracker.log(batch_metrics, step=self.total_steps)
-            except Exception as e:
-                logger.warning(f"Early reward logging failed: {e}")
 
         # re-assign reward but now it's per token rewards
         generator_output["rewards"] = per_token_rewards
@@ -1212,7 +1269,9 @@ class RayPPOTrainer:
         # Early flush of policy / critic metrics so they appear even if later code fails
         if hasattr(self, 'tracker') and self.tracker is not None:
             try:
-                self.tracker.log(self.all_metrics, step=self.global_step)
+                if self.all_metrics:
+                    self.tracker.log(self.all_metrics, step=self.global_step)
+                    self.all_metrics = {}
             except Exception as e:
                 logger.warning(f"Early policy/critic logging failed: {e}")
 

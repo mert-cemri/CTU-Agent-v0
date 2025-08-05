@@ -22,7 +22,7 @@ MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v2-multi-domain
 
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
-DATA_DIR="data/tau_bench_retail"
+DATA_DIR="training/data/tau_bench_multi"
 
 mkdir -p $DATA_DIR
 

@@ -9,6 +9,7 @@ from ray.util.placement_group import placement_group, PlacementGroup
 from transformers import AutoTokenizer
 from skyrl_train.dataset import PromptDataset
 from skyrl_train.utils import validate_cfg
+import os
 
 from skyrl_train.trainer import RayPPOTrainer
 from skyrl_train.inference_engines.inference_engine_client import InferenceEngineClient
@@ -176,6 +177,32 @@ class BasePPOExp:
             return pg
         else:
             return None
+    
+    def get_test_datasets(self):
+        """Load test datasets for evaluation.
+        
+        Returns:
+            dict: Dictionary mapping test set names to PromptDataset objects
+        """
+        test_datasets = {}
+        if (self.cfg.trainer.eval_interval > 0 and 
+            hasattr(self.cfg.data, 'test_data') and 
+            self.cfg.data.test_data):
+            
+            for name, path in self.cfg.data.test_data.items():
+                if path and os.path.exists(path):
+                    test_dataset = PromptDataset(
+                        [path],
+                        self.tokenizer,
+                        self.cfg.trainer.max_prompt_length,
+                        num_processors=8,
+                    )
+                    test_datasets[name] = test_dataset
+                    logger.info(f"Loaded test dataset '{name}' from {path}")
+                else:
+                    logger.warning(f"Test dataset '{name}' not found at {path}")
+        
+        return test_datasets
 
     def get_generator(self, cfg, tokenizer, inference_engine_client):
         """Initializes the generator.
@@ -285,6 +312,11 @@ class BasePPOExp:
         # Set retail eval dataset if available (for multi-domain training)
         if self.retail_eval_dataset is not None:
             trainer.set_retail_eval_dataset(self.retail_eval_dataset)
+        
+        # Set test datasets if available
+        test_datasets = self.get_test_datasets()
+        if test_datasets:
+            trainer.set_test_datasets(test_datasets)
 
         # Build the models
         trainer.build_models(PolicyWorker, CriticWorker, RefWorker, RewardWorker)

@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""
+Convert tau_bench test tasks to parquet format for evaluation during training.
+This handles retail and airline test sets.
+"""
+
+import argparse
+import json
+import os
+from pathlib import Path
+from typing import Dict, List, Any
+
+import pandas as pd
+from tau_bench.envs.retail.tasks_test import TASKS_TEST as retail_test_tasks
+from tau_bench.envs.airline.tasks_test import TASKS as airline_test_tasks
+
+
+def task_to_skyrl_format(task: Any, domain: str) -> Dict[str, Any]:
+    """Convert a tau_bench task to SkyRL format."""
+    
+    # Extract ground truth actions
+    ground_truth_actions = []
+    ground_truth_outputs = []
+    
+    for action in task.actions:
+        action_dict = {
+            "name": action.name,
+            "kwargs": action.kwargs
+        }
+        ground_truth_actions.append(action_dict)
+    
+    # Convert outputs if any
+    if hasattr(task, 'outputs') and task.outputs:
+        ground_truth_outputs = task.outputs
+    
+    # Create the prompt format expected by SkyRL
+    prompt = {
+        "messages": [
+            {
+                "role": "system",
+                "content": f"You are a customer service agent for {domain}. You have access to various tools to help customers."
+            },
+            {
+                "role": "user", 
+                "content": task.instruction
+            }
+        ]
+    }
+    
+    # Create the SkyRL format entry
+    entry = {
+        "prompt": json.dumps(prompt),
+        "env_class": "tau_bench",
+        "reward_spec": {
+            "ground_truth_actions": ground_truth_actions,
+            "ground_truth_outputs": ground_truth_outputs
+        },
+        "extra_info": {
+            "domain": domain,
+            "user_id": task.user_id,
+            "instruction": task.instruction,
+            "user_strategy": "llm",  # Default for test set
+            "task_type": "test",  # Mark as test task
+            "annotator": getattr(task, 'annotator', 'unknown')
+        }
+    }
+    
+    return entry
+
+
+def convert_test_tasks(output_dir: str):
+    """Convert test tasks to parquet files."""
+    
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Convert retail test tasks
+    print(f"Converting {len(retail_test_tasks)} retail test tasks...")
+    retail_data = []
+    for task in retail_test_tasks:
+        entry = task_to_skyrl_format(task, "retail")
+        retail_data.append(entry)
+    
+    retail_df = pd.DataFrame(retail_data)
+    retail_output = output_path / "retail_test.parquet"
+    retail_df.to_parquet(retail_output, index=False)
+    print(f"Saved retail test set to {retail_output}")
+    
+    # Convert airline test tasks
+    print(f"Converting {len(airline_test_tasks)} airline test tasks...")
+    airline_data = []
+    for task in airline_test_tasks:
+        entry = task_to_skyrl_format(task, "airline")
+        airline_data.append(entry)
+    
+    airline_df = pd.DataFrame(airline_data)
+    airline_output = output_path / "airline_test.parquet"
+    airline_df.to_parquet(airline_output, index=False)
+    print(f"Saved airline test set to {airline_output}")
+    
+    # Create combined test set
+    print("Creating combined test set...")
+    combined_data = retail_data + airline_data
+    combined_df = pd.DataFrame(combined_data)
+    combined_output = output_path / "combined_test.parquet"
+    combined_df.to_parquet(combined_output, index=False)
+    print(f"Saved combined test set to {combined_output}")
+    
+    # Print statistics
+    print("\nTest Set Statistics:")
+    print(f"  Retail: {len(retail_data)} tasks")
+    print(f"  Airline: {len(airline_data)} tasks")
+    print(f"  Combined: {len(combined_data)} tasks")
+    
+    # Print file sizes
+    for file in [retail_output, airline_output, combined_output]:
+        size_kb = file.stat().st_size / 1024
+        print(f"  {file.name}: {size_kb:.1f} KB")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Convert tau_bench test tasks to parquet format")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="training/data/tau_bench_test",
+        help="Output directory for parquet files"
+    )
+    
+    args = parser.parse_args()
+    convert_test_tasks(args.output_dir)
+
+
+if __name__ == "__main__":
+    main()
