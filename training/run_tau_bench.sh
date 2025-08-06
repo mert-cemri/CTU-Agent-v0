@@ -23,9 +23,6 @@ MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v5-multi-domain
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
 # DATA_DIR="training/data/tau_bench_multi"
-DATA_DIR="data/tau_bench_multi"
-
-mkdir -p $DATA_DIR
 
 # Clean up existing checkpoints for fresh start
 if [ -d "$CKPT_DIR" ]; then
@@ -55,10 +52,8 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 # Kill any existing Ray processes to ensure clean start
 ray stop || true
 
-# HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
-python main_tau_bench.py \
-  data.train_data="['$DATA_DIR/train.parquet']" \
-  data.val_data="['$DATA_DIR/validation.parquet']" \
+# python main_tau_bench.py \
+HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.policy.model.path="$POLICY_MODEL" \
   trainer.ref.model.path="$REF_MODEL" \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
