@@ -85,7 +85,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=5 \
-  generator.gpu_memory_utilization=0.95 \
+  generator.gpu_memory_utilization=0.8 \
   generator.max_input_length=16384 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
@@ -114,6 +114,6 @@ echo "Exports saved to: $HOME/exports/tau_bench"
 
 ## Old hyperparameters (before context length fix):
 # trainer.max_prompt_length=8192
-# generator.gpu_memory_utilization=0.7
+# generator.gpu_memory_utilization=0.7 (later tried 0.95 but caused OOM)
 # generator.max_input_length=8192
 # DATA_DIR="training/data/tau_bench_multi"
