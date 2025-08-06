@@ -38,6 +38,10 @@ export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 export DEBUG_PARSER=0
 
+# Enable VLLM to use longer context lengths than detected (Qwen2.5-3B supports 32K)
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+export VLLM_MAX_MODEL_LEN=32768
+
 # Ray environment variable for UV support
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
@@ -69,7 +73,8 @@ python main_tau_bench.py \
   trainer.policy_mini_batch_size=16 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=8192 \
+  # trainer.max_prompt_length=8192 \
+  trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=32 \
   trainer.eval_before_train=true \
   trainer.eval_interval=3 \
@@ -85,8 +90,10 @@ python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=5 \
-  generator.gpu_memory_utilization=0.7 \
-  generator.max_input_length=8192 \
+  # generator.gpu_memory_utilization=0.7 \
+  generator.gpu_memory_utilization=0.95 \
+  # generator.max_input_length=8192 \
+  generator.max_input_length=16384 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \
