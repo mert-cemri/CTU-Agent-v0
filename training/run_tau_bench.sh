@@ -69,7 +69,6 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.policy_mini_batch_size=16 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  # trainer.max_prompt_length=8192 \
   trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=32 \
   trainer.eval_before_train=true \
@@ -86,9 +85,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=5 \
-  # generator.gpu_memory_utilization=0.7 \
   generator.gpu_memory_utilization=0.95 \
-  # generator.max_input_length=8192 \
   generator.max_input_length=16384 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
@@ -114,3 +111,9 @@ echo "Checkpoints saved to: $CKPT_DIR"
 echo "Exports saved to: $HOME/exports/tau_bench" 
 
 #6 from 20
+
+## Old hyperparameters (before context length fix):
+# trainer.max_prompt_length=8192
+# generator.gpu_memory_utilization=0.7
+# generator.max_input_length=8192
+# DATA_DIR="training/data/tau_bench_multi"
