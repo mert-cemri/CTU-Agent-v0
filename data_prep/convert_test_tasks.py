@@ -15,6 +15,13 @@ from tau_bench.envs.retail.tasks_test import TASKS_TEST as retail_test_tasks
 from tau_bench.envs.airline.tasks_test import TASKS as airline_test_tasks
 
 
+def serialize_for_parquet(obj: Any) -> str:
+    """Serialize complex objects to JSON strings for parquet compatibility."""
+    if isinstance(obj, (dict, list)):
+        return json.dumps(obj, ensure_ascii=False, default=str)
+    return str(obj)
+
+
 def task_to_skyrl_format(task: Any, domain: str) -> Dict[str, Any]:
     """Convert a tau_bench task to SkyRL format."""
     
@@ -49,20 +56,20 @@ def task_to_skyrl_format(task: Any, domain: str) -> Dict[str, Any]:
     
     # Create the SkyRL format entry
     entry = {
-        "prompt": json.dumps(prompt),
+        "prompt": serialize_for_parquet(prompt),
         "env_class": "tau_bench",
-        "reward_spec": {
+        "reward_spec": serialize_for_parquet({
             "ground_truth_actions": ground_truth_actions,
             "ground_truth_outputs": ground_truth_outputs
-        },
-        "extra_info": {
+        }),
+        "extra_info": serialize_for_parquet({
             "domain": domain,
             "user_id": task.user_id,
             "instruction": task.instruction,
             "user_strategy": "llm",  # Default for test set
             "task_type": "test",  # Mark as test task
             "annotator": getattr(task, 'annotator', 'unknown')
-        }
+        })
     }
     
     return entry
