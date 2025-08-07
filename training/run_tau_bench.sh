@@ -13,7 +13,7 @@
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
 TENSOR_PARALLEL_SIZE=4
-EPOCHS=50
+EPOCHS=100
 
 # Model Configuration - Upgraded to more powerful 3B model
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
@@ -24,12 +24,14 @@ MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v5-multi-domain
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
 # DATA_DIR="training/data/tau_bench_multi"
 
-# Clean up existing checkpoints for fresh start
-if [ -d "$CKPT_DIR" ]; then
-    echo "Removing existing checkpoints at: $CKPT_DIR"
-    rm -rf "$CKPT_DIR"
+# Ensure checkpoint directory exists (don't delete existing checkpoints)
+if [ ! -d "$CKPT_DIR" ]; then
+    echo "Creating checkpoint directory: $CKPT_DIR"
+    mkdir -p $CKPT_DIR
+else
+    echo "Using existing checkpoint directory: $CKPT_DIR"
+    echo "Will resume from latest checkpoint if available"
 fi
-mkdir -p $CKPT_DIR
 
 # # Environment variables
 export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
@@ -72,12 +74,12 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=32 \
   trainer.eval_before_train=true \
-  trainer.eval_interval=3 \
+  trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.02 \
-  trainer.ckpt_interval=10 \
+  trainer.ckpt_interval=5 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
   generator.max_turns=20 \
@@ -103,7 +105,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl" \
   trainer.run_name="tau_bench_qwen2_5_3b_$(date +%Y%m%d_%H%M%S)" \
-  trainer.resume_mode=none \
+  trainer.resume_mode=latest \
   $@
 
 echo "Training completed!"
