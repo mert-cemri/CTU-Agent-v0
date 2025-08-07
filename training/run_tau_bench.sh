@@ -65,6 +65,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
   generator.inference_engine_tensor_parallel_size=$TENSOR_PARALLEL_SIZE \
   trainer.ckpt_path="$CKPT_DIR" \
+  trainer.resume_path=null \
   trainer.export_path="$HOME/exports/tau_bench" \
   trainer.epochs=$EPOCHS \
   trainer.train_batch_size=64 \
