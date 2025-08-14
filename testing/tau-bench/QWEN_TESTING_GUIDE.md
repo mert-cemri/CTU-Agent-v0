@@ -33,8 +33,14 @@ Test the model:
 # Quick test with 3 retail tasks
 python test_qwen.py --env retail --tasks 1 2 3
 
-# Test airline domain
-python test_qwen.py --env airline --tasks 1 2 3 4 5
+# Test ALL retail tasks (50+ tasks)
+python test_qwen.py --env retail
+
+# Test ALL airline tasks (25+ tasks)
+python test_qwen.py --env airline
+
+# Test both domains automatically
+./test_qwen_all.sh
 
 # Test with different temperature
 python test_qwen.py --temperature 0.7 --tasks 1 2 3
@@ -53,10 +59,15 @@ vllm serve /path/to/your/finetuned/qwen2.5-3b \
 
 Test your model:
 ```bash
-python test_qwen.py \
-    --model "your-model-name" \
-    --env retail \
-    --tasks 1 2 3 4 5 6 7 8 9 10
+# Test all tasks in both domains
+./test_qwen_all.sh
+
+# Or manually test each domain
+python test_qwen.py --model "your-model-name" --env retail  # All retail tasks
+python test_qwen.py --model "your-model-name" --env airline # All airline tasks
+
+# Test specific tasks only
+python test_qwen.py --model "your-model-name" --env retail --tasks 1 2 3 4 5
 ```
 
 ## What the Test Does

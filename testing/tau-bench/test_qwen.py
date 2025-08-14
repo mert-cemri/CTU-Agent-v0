@@ -59,11 +59,30 @@ def main():
     parser.add_argument("--model", type=str, default="Qwen/Qwen2.5-3B-Instruct")
     parser.add_argument("--base-url", type=str, default="http://localhost:8000/v1")
     parser.add_argument("--env", type=str, choices=["retail", "airline"], default="retail")
-    parser.add_argument("--tasks", type=int, nargs="+", default=[1, 2, 3])
+    parser.add_argument("--tasks", type=int, nargs="+", default=None, help="Task IDs to test (default: all)")
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--user-model", type=str, default="gpt-4o")
     parser.add_argument("--output-dir", type=str, default="qwen_results")
     args = parser.parse_args()
+    
+    # Load environment to get task count
+    env = get_env(args.env, user_strategy="llm", user_model=args.user_model, user_provider="openai")
+    
+    # Determine tasks to run
+    if args.tasks is None:
+        # Run all tasks
+        from tau_bench.envs.airline.env import MockAirlineDomainEnv
+        from tau_bench.envs.retail.env import MockRetailDomainEnv
+        
+        if args.env == "retail":
+            task_env = MockRetailDomainEnv(user_strategy="llm", user_model=args.user_model, user_provider="openai")
+        else:
+            task_env = MockAirlineDomainEnv(user_strategy="llm", user_model=args.user_model, user_provider="openai")
+        
+        num_tasks = len(task_env.tasks)
+        tasks_to_run = list(range(num_tasks))
+    else:
+        tasks_to_run = args.tasks
     
     print(f"""
 ╔════════════════════════════════════════════════╗
@@ -74,13 +93,10 @@ Configuration:
 - Model: {args.model}
 - VLLM URL: {args.base_url}
 - Environment: {args.env}
-- Tasks: {args.tasks}
+- Tasks: {"ALL (" + str(len(tasks_to_run)) + " tasks)" if args.tasks is None else tasks_to_run}
 - Temperature: {args.temperature}
 - User Model: {args.user_model}
 """)
-    
-    # Load environment for tools
-    env = get_env(args.env, user_strategy="llm", user_model=args.user_model, user_provider="openai")
     
     # Create Qwen-optimized agent
     agent = QwenVLLMAgent(
@@ -99,7 +115,7 @@ Configuration:
     
     # Test each task
     results = []
-    for task_id in args.tasks:
+    for task_id in tasks_to_run:
         result = test_single_task(agent, args.env, task_id, args.user_model)
         results.append(result)
     
