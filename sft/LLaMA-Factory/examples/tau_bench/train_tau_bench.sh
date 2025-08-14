@@ -9,8 +9,8 @@ echo "Training Qwen2.5-${MODEL_SIZE} LoRA model on ${DATASET} dataset"
 
 # Configuration mapping
 case "${MODEL_SIZE}" in
-    "3b") CONFIG="qwen2_5_3b_lora_sft.yaml" ;;
-    "7b") CONFIG="qwen2_5_7b_lora_sft.yaml" ;;
+    "3b") CONFIG="examples/tau_bench/qwen2_5_3b_lora_sft.yaml" ;;
+    "7b") CONFIG="examples/tau_bench/qwen2_5_7b_lora_sft.yaml" ;;
     *)
         echo "Error: Unsupported model size: ${MODEL_SIZE}"
         echo "Supported: 3b, 7b"
