@@ -66,20 +66,18 @@ def main():
     args = parser.parse_args()
     
     # Load environment to get task count
-    env = get_env(args.env, user_strategy="llm", user_model=args.user_model, user_provider="openai")
+    env = get_env(
+        args.env, 
+        user_strategy="llm", 
+        user_model=args.user_model, 
+        user_provider="openai",
+        task_split="test"  # Add missing argument
+    )
     
     # Determine tasks to run
     if args.tasks is None:
         # Run all tasks
-        from tau_bench.envs.airline.env import MockAirlineDomainEnv
-        from tau_bench.envs.retail.env import MockRetailDomainEnv
-        
-        if args.env == "retail":
-            task_env = MockRetailDomainEnv(user_strategy="llm", user_model=args.user_model, user_provider="openai")
-        else:
-            task_env = MockAirlineDomainEnv(user_strategy="llm", user_model=args.user_model, user_provider="openai")
-        
-        num_tasks = len(task_env.tasks)
+        num_tasks = len(env.tasks)
         tasks_to_run = list(range(num_tasks))
     else:
         tasks_to_run = args.tasks
