@@ -20,12 +20,24 @@ export OPENAI_API_KEY="your-api-key"
 
 Start VLLM server with Qwen2.5-3B:
 ```bash
+# For longer contexts (recommended for tau-bench)
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 vllm serve Qwen/Qwen2.5-3B-Instruct \
     --port 8000 \
     --enable-auto-tool-choice \
     --tool-call-parser hermes \
     --trust-remote-code \
-    --max-model-len 8192
+    --max-model-len 32768 \
+    --gpu-memory-utilization 0.95
+
+# Or with conservative memory settings
+vllm serve Qwen/Qwen2.5-3B-Instruct \
+    --port 8000 \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
+    --trust-remote-code \
+    --max-model-len 16384 \
+    --gpu-memory-utilization 0.90
 ```
 
 Test the model:
