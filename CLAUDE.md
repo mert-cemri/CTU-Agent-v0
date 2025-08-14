@@ -118,3 +118,101 @@ Modify `skyrl_train/inference_engines/vllm/vllm_engine.py` to:
 The system falls back to the robust text parser (`tau_bench_env/parser.py`) which handles the malformed outputs we observed, making training functional while we work on native tool calling integration.
 
 This improvement significantly reduces the complex text parsing overhead and makes tool calling more reliable.
+
+## LLaMA-Factory Integration
+
+### Overview
+
+The repository includes **LLaMA-Factory** (`sft/LLaMA-Factory/`), a comprehensive fine-tuning framework for large language models. While currently standalone, it provides infrastructure for supervised fine-tuning (SFT) that could complement the RL training pipeline.
+
+### LLaMA-Factory Components
+
+#### Core Features
+- **Model Support**: 100+ models including LLaMA, Qwen, Mistral, DeepSeek, Yi, Gemma, ChatGLM, Phi
+- **Training Methods**: Pre-training, SFT, DPO, PPO, KTO, ORPO, reward modeling
+- **Optimization**: LoRA, QLoRA (2-8 bit), full-tuning, freeze-tuning
+- **Advanced Algorithms**: GaLore, BAdam, APOLLO, Adam-mini, Muon, DoRA, LongLoRA, PiSSA
+- **Performance**: FlashAttention-2, Unsloth, Liger Kernel, RoPE scaling
+
+#### Directory Structure
+```
+sft/LLaMA-Factory/
+├── src/llamafactory/       # Core training library
+│   ├── api/                # OpenAI-style API server
+│   ├── chat/               # Chat inference engines (HF, vLLM, SGLang)
+│   ├── data/               # Data loading and preprocessing
+│   ├── model/              # Model utilities and adapters
+│   ├── train/              # Training workflows (SFT, DPO, PPO, etc.)
+│   └── webui/              # Gradio-based GUI (LLaMA Board)
+├── examples/               # Training configurations
+│   ├── train_lora/         # LoRA fine-tuning examples
+│   ├── train_full/         # Full fine-tuning examples
+│   └── inference/          # Inference configurations
+├── data/                   # Dataset definitions and samples
+└── scripts/                # Utility scripts
+```
+
+#### Key Capabilities
+
+1. **Multi-Modal Support**
+   - Text, image, video, and audio understanding
+   - Tool calling and function calling support
+   - Multi-turn dialogue handling
+
+2. **Flexible Training**
+   - YAML-based configuration system
+   - Support for custom datasets via `dataset_info.json`
+   - Both CLI and Web UI interfaces
+
+3. **Inference Options**
+   - OpenAI-compatible API server
+   - vLLM and SGLang backends for fast inference
+   - Gradio UI for interactive testing
+
+### Potential Integration Points with CTU-Agent
+
+While LLaMA-Factory is currently standalone in this repository, it could potentially be integrated to provide:
+
+1. **Initial SFT Phase**
+   - Pre-train models on tau_bench demonstrations before RL
+   - Create better initialization for PPO/GRPO training
+   - Fine-tune on successful trajectories from RL training
+
+2. **Alternative Training Pipeline**
+   - Use LLaMA-Factory's PPO implementation as comparison
+   - Leverage its DPO/KTO methods for preference learning
+   - Utilize its efficient LoRA/QLoRA for larger models
+
+3. **Data Processing**
+   - Convert tau_bench data to LLaMA-Factory format
+   - Use its data preprocessing pipeline for cleaning
+   - Leverage its multi-modal data handling
+
+4. **Inference Infrastructure**
+   - Deploy trained models via LLaMA-Factory's API server
+   - Use its vLLM integration for production serving
+   - Leverage Web UI for model evaluation
+
+### Current Status
+
+- **Standalone**: LLaMA-Factory is present but not actively integrated
+- **Ready to Use**: Full framework available for SFT experiments
+- **Complementary**: Could enhance the RL pipeline with SFT capabilities
+
+### Usage Example
+
+To use LLaMA-Factory for SFT on tau_bench data:
+
+1. Convert tau_bench data to LLaMA-Factory format
+2. Add dataset entry to `data/dataset_info.json`
+3. Create training config in `examples/`
+4. Run training via CLI or Web UI
+
+```bash
+# Example: LoRA fine-tuning on Qwen2.5
+cd sft/LLaMA-Factory
+llamafactory-cli train examples/train_lora/qwen2_lora_sft.yaml
+
+# Or use the Web UI
+llamafactory-cli webui
+```
