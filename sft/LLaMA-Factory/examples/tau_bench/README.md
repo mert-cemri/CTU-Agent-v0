@@ -1,45 +1,41 @@
-# Tau-Bench SFT Training
+# Tau-Bench LoRA Training
 
-Train language models on tau_bench multi-turn tool-calling conversations.
+LoRA fine-tuning for Qwen2.5 models on tau_bench reward-filtered dataset.
 
 ## Quick Start
 
 ```bash
-# Convert data and train 3B LoRA model
-./train_tau_bench.sh 3b lora full
+# Train 3B model (recommended)
+./train_tau_bench.sh 3b
 
-# Train 7B QLoRA model on balanced dataset
-./train_tau_bench.sh 7b qlora balanced
+# Train 7B model
+./train_tau_bench.sh 7b
+
+# Use tool-focused dataset
+./train_tau_bench.sh 3b reward_tools
 ```
-
-## Configurations
-
-| Model | Method | Dataset | VRAM | Config |
-|-------|--------|---------|------|--------|
-| Qwen2.5-3B | LoRA | Full | 16GB | `qwen2_5_3b_lora_sft.yaml` |
-| Qwen2.5-3B | Full | Full | 24GB | `qwen2_5_3b_full_sft.yaml` |
-| Qwen2.5-7B | QLoRA | Balanced | 16-20GB | `qwen2_5_7b_qlora_sft.yaml` |
 
 ## Manual Training
 
 ```bash
-# Convert data first
-cd ../../data
-python tau_bench_converter.py \
-  --input_dir ../../../data/tau_bench_multi \
-  --output_dir tau_bench/processed
-
-# Train model
-cd ../examples/tau_bench
+# 3B model
 llamafactory-cli train qwen2_5_3b_lora_sft.yaml
+
+# 7B model  
+llamafactory-cli train qwen2_5_7b_lora_sft.yaml
 ```
 
-## Datasets
+## Hardware Requirements
 
-- `tau_bench_full` - Complete dataset
-- `tau_bench_balanced` - Equal samples per domain
-- `tau_bench_tools` - Tool-calling focused
-- `tau_bench_{domain}` - Domain-specific
+| Model | VRAM | Batch Size | Training Time |
+|-------|------|------------|---------------|
+| Qwen2.5-3B | 16GB | 2 | 8-12 hours |
+| Qwen2.5-7B | 24GB | 1 | 12-18 hours |
+
+## Available Datasets
+
+- `tau_bench_reward_full` - Complete reward-filtered dataset
+- `tau_bench_reward_tools` - Tool-calling focused subset
 
 ## Evaluation
 
@@ -47,6 +43,9 @@ llamafactory-cli train qwen2_5_3b_lora_sft.yaml
 # Interactive chat
 llamafactory-cli chat --model_name_or_path saves/qwen2_5_3b_tau_bench_lora
 
-# API server
-llamafactory-cli api --model_name_or_path saves/qwen2_5_3b_tau_bench_lora
+# Export merged model
+llamafactory-cli export \
+    --model_name_or_path Qwen/Qwen2.5-3B-Instruct \
+    --adapter_name_or_path saves/qwen2_5_3b_tau_bench_lora \
+    --export_dir models/qwen2_5_3b_tau_bench_merged
 ```

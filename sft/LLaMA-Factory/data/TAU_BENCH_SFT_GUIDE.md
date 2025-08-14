@@ -35,7 +35,7 @@ Convert tau_bench multi-turn tool-calling conversations to LLaMA-Factory ShareGP
 
 ## Usage
 
-### 1. Convert Data
+### 1. Convert Data (already completed)
 ```bash
 cd sft/LLaMA-Factory/data
 python tau_bench_converter.py \
@@ -43,18 +43,25 @@ python tau_bench_converter.py \
   --output_dir tau_bench/reward_filtered_sft_data_all_domains
 ```
 
-### 2. Train Model
+### 2. Train Models
 ```bash
 cd ../examples/tau_bench
+
+# Train 3B model (recommended)
+./train_tau_bench.sh 3b
+
+# Train 7B model  
+./train_tau_bench.sh 7b
+
+# Manual training
 llamafactory-cli train qwen2_5_3b_lora_sft.yaml
+llamafactory-cli train qwen2_5_7b_lora_sft.yaml
 ```
 
 ## Dataset Variants
 
-- `tau_bench_full` - Complete dataset
-- `tau_bench_balanced` - Equal samples per domain
-- `tau_bench_tools` - Tool-calling focused
-- `tau_bench_{domain}` - Domain-specific (airline, retail, healthcare, telecom, doordash)
+- `tau_bench_reward_full` - Complete reward-filtered dataset
+- `tau_bench_reward_tools` - Tool-calling focused subset
 
 ## Validation
 
