@@ -45,13 +45,13 @@ python tau_bench_converter.py \
 
 ### 2. Train Models
 ```bash
-cd ../examples/tau_bench
+cd ..
 
 # Train 3B model (recommended)
-./train_tau_bench.sh 3b
+./examples/tau_bench/train_tau_bench.sh 3b
 
 # Train 7B model  
-./train_tau_bench.sh 7b
+./examples/tau_bench/train_tau_bench.sh 7b
 
 # Manual training
 llamafactory-cli train qwen2_5_3b_lora_sft.yaml
