@@ -34,9 +34,14 @@ echo "Starting training with ${CONFIG}..."
 sleep 2
 
 
-export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
 export TOKENIZERS_PARALLELISM=false
 
+# Use all available GPUs if not specified
+if [ -z "${CUDA_VISIBLE_DEVICES}" ]; then
+    echo "Using all available GPUs"
+else
+    echo "Using GPUs: ${CUDA_VISIBLE_DEVICES}"
+fi
 
 llamafactory-cli train "${CONFIG}"
 
