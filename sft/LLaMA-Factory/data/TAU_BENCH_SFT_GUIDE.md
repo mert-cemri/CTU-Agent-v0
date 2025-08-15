@@ -43,6 +43,13 @@ python tau_bench_converter.py \
   --output_dir tau_bench/reward_filtered_sft_data_all_domains
 ```
 
+```bash
+cd sft/LLaMA-Factory/data
+python tau_bench_converter.py \
+  --input_dir ../../../../data/reward_filtered_sft_data_new_domains.jsonl \
+  --output_dir tau_bench/reward_filtered_sft_data_new_domains
+```
+
 ### 2. Train Models
 ```bash
 cd ..
