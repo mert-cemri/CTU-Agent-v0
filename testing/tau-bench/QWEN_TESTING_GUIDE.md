@@ -146,3 +146,6 @@ For better performance:
 2. Start with retail domain (easier than airline)
 3. Test tasks 1-5 first (simpler scenarios)
 4. Fine-tune on tau_bench training data for significant improvement
+
+
+python test_qwen.py --base-url "http://localhost:8001/v1" --env retail --model merged_models/merged-qwen2.5-3b-tau

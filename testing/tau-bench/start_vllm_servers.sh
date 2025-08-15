@@ -24,7 +24,7 @@ CUDA_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen2.5-3B-Instruct \
 
 echo "Starting Fine-tuned 3B on GPU 1 (port 8001)..."
 # Replace with your model path
-CUDA_VISIBLE_DEVICES=1 vllm serve /path/to/your/finetuned-3b \
+CUDA_VISIBLE_DEVICES=1 vllm serve merged_models/merged-qwen2.5-3b-tau \
     --port 8001 \
     --enable-auto-tool-choice \
     --tool-call-parser hermes \
