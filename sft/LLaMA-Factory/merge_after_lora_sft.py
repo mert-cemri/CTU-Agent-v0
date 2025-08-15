@@ -3,9 +3,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 import torch, json, os
 
-base = "Qwen/Qwen2.5-3B-Instruct"   # use the exact base you fine-tuned
-adapter = "saves/qwen2_5_3b_tau_bench_lora"
-out = "merged_models/merged-qwen2.5-3b-tau"
+base = "Qwen/Qwen2.5-7B-Instruct"   # use the exact base you fine-tuned
+adapter = "saves/qwen2_5_7b_tau_bench_lora"
+out = "merged_models/merged-qwen2.5-7b-tau"
 
 tok = AutoTokenizer.from_pretrained(base, trust_remote_code=True)
 model = AutoModelForCausalLM.from_pretrained(

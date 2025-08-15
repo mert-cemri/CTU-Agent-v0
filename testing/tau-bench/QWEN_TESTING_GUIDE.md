@@ -22,7 +22,7 @@ Start VLLM server with Qwen2.5-3B:
 ```bash
 # For longer contexts (recommended for tau-bench)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-vllm serve Qwen/Qwen2.5-3B-Instruct \
+vllm serve Qwen/Qwen2.5-7B-Instruct \
     --port 8000 \
     --enable-auto-tool-choice \
     --tool-call-parser hermes \
@@ -61,6 +61,19 @@ python test_qwen.py --temperature 0.7 --tasks 1 2 3
 ### Option 2: Using Your Fine-tuned Model
 
 Start VLLM with your fine-tuned model:
+
+
+```bash
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+CUDA_VISIBLE_DEVICES=1 vllm serve sft/LLaMA-Factory/merged_models/merged-qwen2.5-7b-tau \
+    --port 8001 \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
+    --trust-remote-code \
+    --max-model-len 32768 \
+    --gpu-memory-utilization 0.95
+```
+
 ```bash
 vllm serve /path/to/your/finetuned/qwen2.5-3b \
     --port 8000 \

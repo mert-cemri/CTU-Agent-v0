@@ -120,8 +120,8 @@ Configuration:
     # Save results
     os.makedirs(args.output_dir, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"{args.output_dir}/qwen25_3b_{args.env}_{timestamp}.json"
-    
+    output_file = f"{args.output_dir}/{args.model.replace('/', '_')}_{args.env}_{timestamp}.json"
+
     with open(output_file, "w") as f:
         json.dump([r.model_dump() if hasattr(r, 'model_dump') else r.__dict__ for r in results], f, indent=2)
     
@@ -151,10 +151,11 @@ Performance Analysis:
     
     # Task-specific feedback
     print("\nTask Analysis:")
+    count = 0
     for r in results:
         status = "✅ Success" if r.reward > 0.9 else "⚠️  Partial" if r.reward > 0 else "❌ Failed"
-        print(f"  Task {r.task_id}: {status} (reward: {r.reward:.2f})")
-
+        print(f"  Task {count}: {status} (reward: {r.reward:.2f})")
+        count += 1
 
 if __name__ == "__main__":
     main()

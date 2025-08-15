@@ -14,6 +14,7 @@ sleep 2
 
 # Start servers in background
 echo "Starting Base Qwen2.5-3B on GPU 0 (port 8000)..."
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 CUDA_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen2.5-3B-Instruct \
     --port 8000 \
     --enable-auto-tool-choice \
@@ -24,7 +25,8 @@ CUDA_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen2.5-3B-Instruct \
 
 echo "Starting Fine-tuned 3B on GPU 1 (port 8001)..."
 # Replace with your model path
-CUDA_VISIBLE_DEVICES=1 vllm serve merged_models/merged-qwen2.5-3b-tau \
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+CUDA_VISIBLE_DEVICES=1 vllm serve sft/LLaMA-Factory/merged_models/merged-qwen2.5-3b-tau \
     --port 8001 \
     --enable-auto-tool-choice \
     --tool-call-parser hermes \
