@@ -9,7 +9,7 @@ REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v6-multi-domain
 
 # Run training with multi-domain data and retail validation set
-bash training/run_tau_bench.sh \
+bash training/run_tau_bench_7b.sh \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   data.retail_val_data="['$RETAIL_VAL_DIR/validation.parquet']" \
