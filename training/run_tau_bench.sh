@@ -16,9 +16,9 @@ TENSOR_PARALLEL_SIZE=4
 EPOCHS=100
 
 # Model Configuration - Upgraded to more powerful 3B model
-POLICY_MODEL="Qwen/Qwen2.5-7B-Instruct"
-REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v8-multi-domain
+POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
+REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v7-multi-domain
 
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
