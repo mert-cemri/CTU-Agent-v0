@@ -115,9 +115,11 @@ class Tracking:
         # This is because wandb often errors out with a BrokenPipeError when closing.
         # https://github.com/wandb/wandb/issues/6449
         # TODO (sumanthrh): Check if this is really needed. Trackers like wandb will automatically finish at program exit.
+        # FIXED: Commenting out wandb.finish() to prevent premature termination
+        # wandb handles cleanup automatically at program exit
         try:
-            if "wandb" in self.logger:
-                self.logger["wandb"].finish(exit_code=0)
+            # if "wandb" in self.logger:
+            #     self.logger["wandb"].finish(exit_code=0)
             if "swanlab" in self.logger:
                 self.logger["swanlab"].finish()
             if "vemlp_wandb" in self.logger:
