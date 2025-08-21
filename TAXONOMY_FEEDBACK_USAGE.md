@@ -18,10 +18,11 @@ The CTU-Agent-v0 system now supports LLM Judge evaluation using the MAST taxonom
 
 ```bash
 # Enable/disable taxonomy feedback (required)
-export TAXONOMY_FEEDBACK=true
+# Note: Use string values "true" or "false" when setting environment variables
+export TAXONOMY_FEEDBACK="true"
 
 # Weight for judge rewards (optional, default: 1.0)
-export TAXONOMY_ALPHA=0.5
+export TAXONOMY_ALPHA="0.5"
 
 # OpenAI API key for LLM judge (required when enabled)
 export OPENAI_API_KEY=your_openai_api_key_here
@@ -35,7 +36,7 @@ export DEBUG_PARSER=1
 For **3B model**:
 ```bash
 # With taxonomy feedback
-TAXONOMY_FEEDBACK=true TAXONOMY_ALPHA=0.3 bash training/run_multi_domain.sh
+TAXONOMY_FEEDBACK="true" TAXONOMY_ALPHA="0.3" bash training/run_multi_domain.sh
 
 # Without taxonomy feedback (vanilla training)
 bash training/run_multi_domain.sh
@@ -44,7 +45,7 @@ bash training/run_multi_domain.sh
 For **7B model**:
 ```bash
 # With taxonomy feedback
-TAXONOMY_FEEDBACK=true TAXONOMY_ALPHA=0.5 bash training/run_multi_domain_7b_optimized.sh
+TAXONOMY_FEEDBACK="true" TAXONOMY_ALPHA="0.5" bash training/run_multi_domain_7b_optimized.sh
 
 # Without taxonomy feedback (vanilla training)  
 bash training/run_multi_domain_7b_optimized.sh

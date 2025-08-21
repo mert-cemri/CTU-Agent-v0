@@ -32,8 +32,8 @@ export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 export DEBUG_PARSER=0
 
 # LLM Judge / Taxonomy Feedback settings
-export TAXONOMY_FEEDBACK=${TAXONOMY_FEEDBACK:-"false"}
-export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1.0"}
+export TAXONOMY_FEEDBACK=${TAXONOMY_FEEDBACK:-false}
+export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-1.0}
 
 # Enable VLLM to use longer context lengths
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
