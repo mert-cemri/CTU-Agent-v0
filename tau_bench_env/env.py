@@ -12,6 +12,7 @@ from tau_bench.envs.user import UserStrategy
 
 from .parser import parse_llm_response, format_tool_info_for_llm
 from .simple_parser import parse_tool_calling_response
+from .llm_judge_integration import TauBenchLLMJudge, create_judge_from_config
 
 
 class TauBenchEnv(BaseTextEnv):
@@ -106,6 +107,9 @@ class TauBenchEnv(BaseTextEnv):
         # Tool calling configuration
         self.use_native_tool_calling = env_config.get("use_native_tool_calling", False)
         
+        # LLM Judge integration for taxonomy-based feedback
+        self.llm_judge = create_judge_from_config(env_config)
+        
         # Check if we have API keys for LLM user simulation
         if self.user_strategy == "llm" and self.user_provider == "openai":
             if not os.environ.get("OPENAI_API_KEY"):
@@ -118,11 +122,19 @@ class TauBenchEnv(BaseTextEnv):
         self.turns = 0
         self.max_turns = env_config.get("max_turns", 20)
         
-        # Initialize tau_bench environment
-        self.tau_env = self._create_tau_env()
-        assert self.tau_env is not None, "Failed to create tau_bench environment"
-        self.tools_info = self.tau_env.tools_info
-        assert len(self.tools_info) > 0, f"No tools available for domain {self.domain}"
+        # Initialize tau_bench environment with error handling
+        try:
+            self.tau_env = self._create_tau_env()
+            assert self.tau_env is not None, "Failed to create tau_bench environment"
+            self.tools_info = self.tau_env.tools_info
+            assert len(self.tools_info) > 0, f"No tools available for domain {self.domain}"
+        except Exception as e:
+            # Handle any API errors during environment initialization
+            error_message = str(e)
+            if "InternalServerError" in str(type(e)) or ("missing" in error_message and "positional arguments" in error_message):
+                raise RuntimeError(f"Failed to initialize tau_bench environment due to API error: {error_message}") from None
+            else:
+                raise
         
         # Environment state
         self.task_initialized = False
@@ -189,8 +201,17 @@ class TauBenchEnv(BaseTextEnv):
         self.conversation_history = []
         self.conversation_done = False
         
-        # Reset tau_bench environment
-        env_reset_response = self.tau_env.reset(task_index=0)
+        # Reset tau_bench environment with error handling
+        try:
+            env_reset_response = self.tau_env.reset(task_index=0)
+        except Exception as e:
+            # Handle API errors during environment reset
+            error_message = str(e)
+            if "InternalServerError" in str(type(e)) or ("missing" in error_message and "positional arguments" in error_message):
+                raise RuntimeError(f"Failed to reset tau_bench environment due to API error: {error_message}") from None
+            else:
+                raise
+        
         assert hasattr(env_reset_response, 'observation'), \
             f"Invalid reset response: {env_reset_response}"
         
@@ -363,8 +384,22 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         if parsed_action.name != RESPOND_ACTION_NAME:
             self.agent_actions.append(parsed_action)
         
-        # Execute action in tau_bench environment
-        tau_result = self.tau_env.step(parsed_action)
+        # Execute action in tau_bench environment with error handling for Ray serialization
+        try:
+            tau_result = self.tau_env.step(parsed_action)
+        except Exception as e:
+            # Handle litellm and other API errors that can't be serialized across Ray workers
+            error_message = str(e)
+            if "InternalServerError" in str(type(e)) and hasattr(e, '__init__'):
+                # Convert litellm InternalServerError to a simple serializable exception
+                raise RuntimeError(f"API Error in tau_bench environment: {error_message}") from None
+            elif "missing" in error_message and "positional arguments" in error_message:
+                # Handle serialization issues with custom exception classes
+                raise RuntimeError(f"Serialization error in tau_bench: {error_message}") from None
+            else:
+                # Re-raise other exceptions as-is
+                raise
+        
         assert hasattr(tau_result, 'observation') and hasattr(tau_result, 'done'), \
             f"Invalid tau_result structure: {tau_result}"
         
@@ -433,6 +468,39 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                 if parsed_action.name == RESPOND_ACTION_NAME:
                     reward -= 0.05
         
+        # Add LLM Judge evaluation reward bonus (both for done and intermediate steps)
+        judge_reward_bonus = 0.0
+        if self.llm_judge and self.llm_judge.enabled:
+            try:
+                # Evaluate current conversation state
+                judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
+                judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
+                
+                # Log judge evaluation for debugging
+                if os.environ.get("DEBUG_PARSER", "0") == "1" and judge_result.get("evaluation"):
+                    print(f"\n🏛️ LLM JUDGE EVALUATION:")
+                    print(f"   Total failures: {judge_result['evaluation'].get('total_failures', 'N/A')}")
+                    print(f"   Alpha weight: {self.llm_judge.alpha}")
+                    print(f"   Raw bonus: {judge_reward_bonus / self.llm_judge.alpha:.3f}" if self.llm_judge.alpha > 0 else "N/A")
+                    print(f"   Weighted bonus: {judge_reward_bonus:.3f}")
+                    print(f"   Summary: {judge_result['evaluation'].get('summary', 'No summary')[:100]}...")
+                    
+            except Exception as e:
+                # Handle API errors that might not be serializable across Ray workers
+                error_message = str(e)
+                if "InternalServerError" in str(type(e)) or "missing" in error_message and "positional arguments" in error_message:
+                    # Convert non-serializable API errors to simple messages
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"\n❌ LLM JUDGE API ERROR (converted): {error_message}")
+                else:
+                    # Log error but don't fail the step
+                    if os.environ.get("DEBUG_PARSER", "0") == "1":
+                        print(f"\n❌ LLM JUDGE ERROR: {e}")
+                judge_reward_bonus = 0.0
+        
+        # Apply judge reward bonus to final reward
+        reward += judge_reward_bonus
+        
         # Mark as done
         if done:
             self.conversation_done = True
@@ -467,7 +535,11 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                 "ground_truth_actions": self.ground_truth_actions,
                 "tau_result": tau_result.model_dump(),
                 "conversation_history": self.conversation_history,
-                "parsed_action": parsed_action.model_dump()
+                "parsed_action": parsed_action.model_dump(),
+                "judge_reward_bonus": judge_reward_bonus,
+                "base_reward": reward - judge_reward_bonus,
+                "taxonomy_alpha": self.llm_judge.alpha if self.llm_judge else 0.0,
+                "taxonomy_enabled": self.llm_judge.enabled if self.llm_judge else False
             }
         )
     

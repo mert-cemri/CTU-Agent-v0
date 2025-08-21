@@ -485,6 +485,74 @@ Added filtering for empty model responses to prevent training crashes
 
 ---
 
+## Section 17: WandB Tracking Fix - Premature Session Termination
+
+### Problem
+WandB runs were appearing as finished after 1 epoch/step despite training continuing. The issue was in `skyrl_train/utils/tracking.py` where `wandb.finish()` was being called in the `__del__` destructor method, causing premature termination when garbage collection occurred.
+
+### Solution
+Commented out the `wandb.finish()` call in the destructor, allowing wandb to handle cleanup automatically at program exit:
+
+```python
+def __del__(self):
+    try:
+        # FIXED: Commenting out wandb.finish() to prevent premature termination
+        # wandb handles cleanup automatically at program exit
+        # if "wandb" in self.logger:
+        #     self.logger["wandb"].finish(exit_code=0)
+        if "swanlab" in self.logger:
+            self.logger["swanlab"].finish()
+        # ... other loggers ...
+```
+
+### Files Changed
+- **`SkyRL_mod/skyrl-train/skyrl_train/utils/tracking.py`**: Lines 121-122 commented out
+
+### Impact
+- WandB sessions now properly track the entire training run
+- Metrics continue logging throughout all epochs
+- No more premature "finished" status after 1 step
+
+---
+
+## Section 18: Taxonomy Feedback WandB Project Separation
+
+### Problem
+Need to distinguish between vanilla training runs and runs with LLM Judge taxonomy feedback enabled for better experiment tracking and comparison.
+
+### Solution
+Modified WandB project naming to automatically append `_with_taxonomy_feedback` when taxonomy feedback is enabled:
+
+```python
+# In tracking.py __init__ method
+if "wandb" in default_backend:
+    # Check if taxonomy feedback is enabled
+    taxonomy_feedback_enabled = False
+    if config is not None:
+        if hasattr(config, 'environment') and hasattr(config.environment, 'skyrl_gym'):
+            if hasattr(config.environment.skyrl_gym, 'tau_bench'):
+                taxonomy_feedback_enabled = getattr(config.environment.skyrl_gym.tau_bench, 'TAXONOMY_FEEDBACK', False)
+        
+        # Also check environment variable
+        if not taxonomy_feedback_enabled:
+            taxonomy_feedback_enabled = os.environ.get('TAXONOMY_FEEDBACK', 'false').lower() == 'true'
+    
+    # Append taxonomy feedback indicator to project name
+    if taxonomy_feedback_enabled:
+        project_name = f"{project_name}_with_taxonomy_feedback"
+```
+
+### Files Changed
+- **`SkyRL_mod/skyrl-train/skyrl_train/utils/tracking.py`**: Lines 44-57 added taxonomy feedback detection and project name modification
+
+### Impact
+- Vanilla runs: `tau_bench_rl` (3B), `tau_bench_rl_7b` (7B)
+- With taxonomy: `tau_bench_rl_with_taxonomy_feedback` (3B), `tau_bench_rl_7b_with_taxonomy_feedback` (7B)
+- Clear separation of experiments with different reward mechanisms
+- Easy comparison between vanilla and enhanced training approaches
+
+---
+
 ## Summary
 
 All changes maintain backward compatibility while adding:
@@ -494,5 +562,7 @@ All changes maintain backward compatibility while adding:
 - Improved logging and monitoring
 - Robust error handling
 - Better generalization through hyperparameter optimization
+- Fixed WandB premature termination issue
+- Taxonomy feedback with separate project tracking
 
-The system now supports efficient multi-domain RL training with proper tool use across different domains.
+The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation, and reliable experiment tracking.

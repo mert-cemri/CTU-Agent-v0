@@ -31,6 +31,10 @@ export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 export DEBUG_PARSER=0
 
+# LLM Judge / Taxonomy Feedback settings
+export TAXONOMY_FEEDBACK=${TAXONOMY_FEEDBACK:-"false"}
+export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1.0"}
+
 # Enable VLLM to use longer context lengths
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export VLLM_MAX_MODEL_LEN=16384  # Reduced from 32768 for 7B model
@@ -121,6 +125,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.user_provider="openai" \
   environment.skyrl_gym.tau_bench.max_turns=10 \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
+  environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=${TAXONOMY_FEEDBACK} \
+  environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=${TAXONOMY_ALPHA} \
   environment.skyrl_gym.max_env_workers=8 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_rl_7b" \

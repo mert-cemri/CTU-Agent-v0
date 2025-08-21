@@ -38,7 +38,23 @@ class Tracking:
 
         if "wandb" in default_backend:
             import wandb
+            import os
             from omegaconf import OmegaConf
+
+            # Modify project name if taxonomy feedback is enabled
+            taxonomy_feedback_enabled = False
+            if config is not None:
+                # Check config for taxonomy feedback setting
+                if hasattr(config, 'environment') and hasattr(config.environment, 'skyrl_gym') and hasattr(config.environment.skyrl_gym, 'tau_bench'):
+                    taxonomy_feedback_enabled = getattr(config.environment.skyrl_gym.tau_bench, 'TAXONOMY_FEEDBACK', False)
+                
+                # Also check environment variable
+                if not taxonomy_feedback_enabled:
+                    taxonomy_feedback_enabled = os.environ.get('TAXONOMY_FEEDBACK', 'false').lower() == 'true'
+            
+            # Append taxonomy feedback indicator to project name
+            if taxonomy_feedback_enabled:
+                project_name = f"{project_name}_with_taxonomy_feedback"
 
             wandb.init(project=project_name, name=experiment_name, config=OmegaConf.to_container(config, resolve=True))
             self.logger["wandb"] = wandb
