@@ -35,9 +35,13 @@ export DEBUG_PARSER=0
 export TAXONOMY_FEEDBACK="false"
 export TAXONOMY_ALPHA="0.0"
 
-# Enable VLLM settings
+# Memory optimization settings
+export PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True"
+export CUDA_LAUNCH_BLOCKING=0
+
+# Enable VLLM settings (reduced for memory)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=32768
+export VLLM_MAX_MODEL_LEN=16384  # Reduced from 32768 to save memory
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -56,6 +60,12 @@ echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
 echo "Taxonomy Feedback: DISABLED"
 echo "WandB Project: tau_bench_retail_grpo"
+echo "Memory Optimizations: ENABLED"
+echo "  - Reduced batch sizes (32/8)"
+echo "  - CPU offloading enabled"
+echo "  - Gradient checkpointing enabled"
+echo "  - Reduced context length (8192)"
+echo "  - GPU utilization: 0.7"
 echo ""
 
 HYDRA_FULL_ERROR=1 python main_tau_bench.py \
@@ -71,30 +81,42 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$HOME/exports/tau_bench_retail" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=64 \
-  trainer.policy_mini_batch_size=16 \
+  trainer.train_batch_size=32 \
+  trainer.policy_mini_batch_size=8 \
+  trainer.critic_mini_batch_size=8 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=32 \
+  trainer.max_prompt_length=8192 \
+  trainer.eval_batch_size=16 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \
+  trainer.policy.optimizer_config.weight_decay=0.01 \
+  trainer.policy.optimizer_config.max_grad_norm=1.0 \
+  trainer.policy.fsdp_config.cpu_offload=true \
+  trainer.ref.fsdp_config.cpu_offload=true \
+  trainer.critic.fsdp_config.cpu_offload=true \
+  trainer.reward.fsdp_config.cpu_offload=true \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.02 \
   trainer.ckpt_interval=5 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
-  generator.max_turns=20 \
+  trainer.gradient_checkpointing=true \
+  trainer.gradient_checkpointing_use_reentrant=false \
+  generator.max_turns=15 \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=5 \
-  generator.gpu_memory_utilization=0.8 \
-  generator.max_input_length=16384 \
+  generator.n_samples_per_prompt=3 \
+  generator.gpu_memory_utilization=0.7 \
+  generator.max_input_length=8192 \
+  generator.max_num_batched_tokens=8192 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=1024 \
+  generator.enable_prefix_caching=false \
+  generator.enable_chunked_prefill=false \
+  generator.sampling_params.max_generate_length=512 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
