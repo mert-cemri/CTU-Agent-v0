@@ -37,7 +37,7 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
 # Conservative VLLM settings for memory
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=16384
+export VLLM_MAX_MODEL_LEN=20000
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
