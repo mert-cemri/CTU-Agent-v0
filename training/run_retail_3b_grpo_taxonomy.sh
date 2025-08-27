@@ -35,9 +35,9 @@ export DEBUG_PARSER=0
 export TAXONOMY_FEEDBACK="true"
 export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
-# Enable VLLM settings
+# Conservative VLLM settings for memory
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=32768
+export VLLM_MAX_MODEL_LEN=8192
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -56,6 +56,7 @@ echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
 echo "Taxonomy Feedback: ENABLED (alpha=$TAXONOMY_ALPHA)"
 echo "WandB Project: tau_bench_retail_grpo_with_taxonomy_feedback"
+echo "Conservative memory settings enabled"
 echo ""
 
 # Verify OpenAI key is set
@@ -77,30 +78,41 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$HOME/exports/tau_bench_retail" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=64 \
-  trainer.policy_mini_batch_size=16 \
+  trainer.train_batch_size=16 \
+  trainer.policy_mini_batch_size=4 \
+  trainer.critic_mini_batch_size=4 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=32 \
+  trainer.max_prompt_length=8192 \
+  trainer.eval_batch_size=8 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \
+  trainer.policy.fsdp_config.cpu_offload=true \
+  trainer.ref.fsdp_config.cpu_offload=true \
+  trainer.critic.fsdp_config.cpu_offload=true \
+  trainer.reward.fsdp_config.cpu_offload=true \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.02 \
   trainer.ckpt_interval=5 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
-  generator.max_turns=20 \
+  trainer.gradient_checkpointing=true \
+  trainer.gradient_checkpointing_use_reentrant=false \
+  generator.max_turns=15 \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=5 \
-  generator.gpu_memory_utilization=0.8 \
-  generator.max_input_length=16384 \
+  generator.n_samples_per_prompt=3 \
+  generator.gpu_memory_utilization=0.5 \
+  generator.max_input_length=8192 \
+  generator.max_num_batched_tokens=4096 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=1024 \
+  generator.enable_prefix_caching=false \
+  generator.enable_chunked_prefill=false \
+  generator.swap_space=2 \
+  generator.sampling_params.max_generate_length=512 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
@@ -113,7 +125,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=$TAXONOMY_ALPHA \
-  environment.skyrl_gym.max_env_workers=16 \
+  environment.skyrl_gym.max_env_workers=8 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_retail_grpo" \
   trainer.run_name="retail_3b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
