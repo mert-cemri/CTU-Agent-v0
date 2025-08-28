@@ -5,8 +5,8 @@
 
 # Configuration
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4
+NUM_INFERENCE_ENGINES=1
+TENSOR_PARALLEL_SIZE=2
 EPOCHS=100
 
 # Model Configuration
@@ -72,12 +72,12 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$HOME/exports/tau_bench_retail" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=16 \
-  trainer.policy_mini_batch_size=4 \
+  trainer.train_batch_size=8 \
+  trainer.policy_mini_batch_size=2 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=8 \
+  trainer.eval_batch_size=4 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
@@ -91,8 +91,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
-  generator.gpu_memory_utilization=0.5 \
+  generator.n_samples_per_prompt=2 \
+  generator.gpu_memory_utilization=0.4 \
   generator.max_input_length=16384 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=512 \
@@ -108,7 +108,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
-  environment.skyrl_gym.max_env_workers=8 \
+  environment.skyrl_gym.max_env_workers=4 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_retail_grpo" \
   trainer.run_name="retail_3b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
