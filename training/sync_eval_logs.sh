@@ -6,7 +6,19 @@
 # Configuration
 REPO_DIR="$(dirname "$0")/.."
 EVAL_LOGS_DIR="$REPO_DIR/evaluation_logs"
-SOURCE_EXPORTS="$HOME/exports"
+
+# Detect the correct exports directory
+if [ -d "/root/exports" ]; then
+    SOURCE_EXPORTS="/root/exports"
+elif [ -d "$HOME/exports" ]; then
+    SOURCE_EXPORTS="$HOME/exports"
+else
+    echo "Error: Cannot find exports directory"
+    echo "Tried: /root/exports and $HOME/exports"
+    exit 1
+fi
+
+echo "Using exports directory: $SOURCE_EXPORTS"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -32,12 +44,19 @@ sync_training_run() {
         
         echo -e "${YELLOW}Syncing $run_name evaluations...${NC}"
         
-        # Copy only the latest evaluation for each checkpoint to save space
-        # Or copy all if you want complete history
-        cp -r "$source_dir/dumped_evals" "$dest_dir/" 2>/dev/null
+        # Copy all evaluation data
+        echo "  Source: $source_dir/dumped_evals"
+        echo "  Destination: $dest_dir/"
+        
+        if cp -rv "$source_dir/dumped_evals" "$dest_dir/" 2>&1; then
+            echo "  Copy successful"
+        else
+            echo "  Copy failed - checking permissions and paths..."
+            ls -la "$source_dir/" | head -5
+        fi
         
         # Count the files synced
-        local file_count=$(find "$dest_dir" -type f -name "*.json*" 2>/dev/null | wc -l)
+        local file_count=$(find "$dest_dir" -type f \( -name "*.json*" -o -name "*.txt" -o -name "*.log" \) 2>/dev/null | wc -l)
         echo "  Synced $file_count evaluation files for $run_name"
     else
         echo "  No evaluations found for $run_name"

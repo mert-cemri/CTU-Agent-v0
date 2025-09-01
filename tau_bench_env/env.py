@@ -469,8 +469,10 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                     reward -= 0.05
         
         # Add LLM Judge evaluation reward bonus (both for done and intermediate steps)
+        # IMPORTANT: Only apply judge rewards during training, not evaluation
         judge_reward_bonus = 0.0
-        if self.llm_judge and self.llm_judge.enabled:
+        is_training = os.environ.get("SKYRL_MODE", "train") == "train"
+        if self.llm_judge and self.llm_judge.enabled and is_training:
             try:
                 # Evaluate current conversation state
                 judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)

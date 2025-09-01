@@ -157,6 +157,11 @@ class RayPPOTrainer:
         Returns:
             A dictionary of evaluation metrics.
         """
+        # Set environment variable to indicate we're in evaluation mode
+        # This prevents LLM Judge rewards from being applied during evaluation
+        import os
+        os.environ["SKYRL_MODE"] = "eval"
+        
         # 0. Make a copy of self.all_metrics (will restore at the end)
         # eval() might accidentally mutate `self.all_metrics` since it is mutated in
         # methods like `self.generate()`.
@@ -344,6 +349,9 @@ class RayPPOTrainer:
 
         # 7. Restore self.all_metrics
         self.all_metrics = all_metrics_copy
+        
+        # Reset mode back to training after evaluation
+        os.environ["SKYRL_MODE"] = "train"
 
         return eval_metrics
 
@@ -351,6 +359,9 @@ class RayPPOTrainer:
         """
         Main training loop for PPO
         """
+        # Ensure we're in training mode (for LLM Judge rewards)
+        import os
+        os.environ["SKYRL_MODE"] = "train"
 
         self.global_step = 0
         self.weights_manager = InferenceWeightsManager(
