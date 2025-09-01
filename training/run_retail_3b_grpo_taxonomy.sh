@@ -10,8 +10,9 @@ TENSOR_PARALLEL_SIZE=4
 EPOCHS=100
 
 # Model Configuration
-POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
-REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
+# Replace this path with your SFT model path
+POLICY_MODEL="/path/to/your/sft/model"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
+REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy
 
 # Data Configuration - Using retail domain only
