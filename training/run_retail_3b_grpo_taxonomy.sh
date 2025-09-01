@@ -14,7 +14,7 @@ EPOCHS=100
 # POLICY_MODEL="/path/to/your/sft/model"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v2
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
