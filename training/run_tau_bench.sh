@@ -24,7 +24,7 @@ MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v8-multi-domain
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist
-CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
 EXPORT_DIR="$CTU_ROOT/exports/tau_bench"
 # DATA_DIR="training/data/tau_bench_multi"
 
