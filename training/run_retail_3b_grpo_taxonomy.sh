@@ -19,8 +19,12 @@ MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v2
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
 
+# Get the CTU-Agent-v0 root directory
+CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -78,7 +82,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.inference_engine_tensor_parallel_size=$TENSOR_PARALLEL_SIZE \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.resume_path=null \
-  trainer.export_path="$HOME/exports/tau_bench_retail" \
+  trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
   trainer.train_batch_size=8 \
   trainer.policy_mini_batch_size=4 \
@@ -127,5 +131,5 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
 
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
-echo "Exports saved to: $HOME/exports/tau_bench_retail"
+echo "Exports saved to: $EXPORT_DIR"
 echo "Taxonomy alpha: $TAXONOMY_ALPHA"

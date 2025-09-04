@@ -2,6 +2,10 @@
 
 import os
 import sys
+
+# Set default training mode early (before any imports that might create environments)
+os.environ.setdefault("SKYRL_MODE", "train")
+
 import ray
 import hydra
 from omegaconf import DictConfig

@@ -8,13 +8,20 @@ REPO_DIR="$(dirname "$0")/.."
 EVAL_LOGS_DIR="$REPO_DIR/evaluation_logs"
 
 # Detect the correct exports directory
-if [ -d "/root/exports" ]; then
+# First check if exports are in CTU-Agent-v0 directory (new location)
+CTU_EXPORTS="$REPO_DIR/exports"
+if [ -d "$CTU_EXPORTS" ]; then
+    SOURCE_EXPORTS="$CTU_EXPORTS"
+    echo "Using CTU-Agent-v0 exports directory"
+elif [ -d "/root/exports" ]; then
     SOURCE_EXPORTS="/root/exports"
+    echo "Using legacy root exports directory"
 elif [ -d "$HOME/exports" ]; then
     SOURCE_EXPORTS="$HOME/exports"
+    echo "Using legacy home exports directory"
 else
     echo "Error: Cannot find exports directory"
-    echo "Tried: /root/exports and $HOME/exports"
+    echo "Tried: $CTU_EXPORTS, /root/exports, and $HOME/exports"
     exit 1
 fi
 

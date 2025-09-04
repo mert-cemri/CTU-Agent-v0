@@ -217,7 +217,7 @@ class RayPPOTrainer:
                 if hasattr(self, 'tracker') and self.tracker is not None:
                     try:
                         self.all_metrics.update(eval_reward_metrics)
-                        logger.info(f"[Eval Step {self.total_steps}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
+                        logger.info(f"[Eval Step {self.global_step}] Eval rewards - Avg: {eval_reward_metrics['eval/instant_avg_reward']:.3f}, Success: {eval_reward_metrics['eval/instant_success_rate']:.3f}")
                     except Exception as e:
                         logger.warning(f"Failed to log eval reward metrics: {e}")
 

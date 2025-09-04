@@ -20,8 +20,12 @@ POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_v8-multi-domain
 
+# Get the CTU-Agent-v0 root directory
+CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+
 # Make sure required directories exist
 CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench"
 # DATA_DIR="training/data/tau_bench_multi"
 
 # Ensure checkpoint directory exists (don't delete existing checkpoints)
@@ -70,7 +74,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
   generator.inference_engine_tensor_parallel_size=$TENSOR_PARALLEL_SIZE \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.resume_path=null \
-  trainer.export_path="$HOME/exports/tau_bench" \
+  trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
   trainer.train_batch_size=64 \
   trainer.policy_mini_batch_size=16 \
@@ -117,7 +121,7 @@ HYDRA_FULL_ERROR=1 CUDA_LAUNCH_BLOCKING=1 python main_tau_bench.py \
 
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
-echo "Exports saved to: $HOME/exports/tau_bench" 
+echo "Exports saved to: $EXPORT_DIR" 
 
 #6 from 20
 

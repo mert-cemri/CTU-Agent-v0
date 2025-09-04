@@ -566,3 +566,79 @@ All changes maintain backward compatibility while adding:
 - Taxonomy feedback with separate project tracking
 
 The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation, and reliable experiment tracking.
+
+---
+
+## Section 19: Critical Fix - Disable LLM Judge During Evaluation
+
+### Problem
+When TAXONOMY_FEEDBACK was enabled, the LLM Judge was providing reward bonuses during BOTH training AND evaluation. This inflated evaluation metrics and made them invalid for comparing model performance. Evaluation success rates appeared artificially high because they included judge reward bonuses that should only apply during training.
+
+### Solution
+Added environment variable `SKYRL_MODE` to distinguish between training and evaluation phases:
+
+#### A. Environment Check (`tau_bench_env/env.py`, line 474)
+```python
+# Before: Always apply judge rewards if enabled
+if self.llm_judge and self.llm_judge.enabled:
+
+# After: Only apply during training
+is_training = os.environ.get("SKYRL_MODE", "train") == "train"
+if self.llm_judge and self.llm_judge.enabled and is_training:
+```
+
+#### B. Mode Setting in Trainer (`skyrl_train/trainer.py`)
+
+1. **In eval() method** (lines 160-163):
+```python
+# Set environment variable to indicate we're in evaluation mode
+# This prevents LLM Judge rewards from being applied during evaluation
+import os
+os.environ["SKYRL_MODE"] = "eval"
+```
+
+2. **After eval() completion** (line 354):
+```python
+# Reset mode back to training after evaluation
+os.environ["SKYRL_MODE"] = "train"
+```
+
+3. **In train() method** (lines 362-364):
+```python
+# Ensure we're in training mode (for LLM Judge rewards)
+import os
+os.environ["SKYRL_MODE"] = "train"
+```
+
+### Files Changed
+- **`tau_bench_env/env.py`**: Line 474 - Added training mode check
+- **`SkyRL_mod/skyrl-train/skyrl_train/trainer.py`**: Lines 160-163, 354, 362-364 - Added mode management
+
+### Impact
+- **Training**: Model still receives taxonomy feedback rewards to improve learning
+- **Evaluation**: Pure task performance without inflated rewards
+- **Fair Comparison**: Vanilla vs Taxonomy models can now be compared fairly
+- **Valid Metrics**: Evaluation results now reflect true task completion rates
+
+### Verification
+After this fix, evaluation success rates should be:
+- Similar between vanilla and taxonomy models (since eval doesn't use judge)
+- Lower than pre-fix results (no more inflated rewards)
+- A true measure of task completion performance
+
+---
+
+## Summary
+
+All changes maintain backward compatibility while adding:
+- Native VLLM tool calling support
+- Multi-domain training capabilities
+- Test set evaluation during training
+- Improved logging and monitoring
+- Robust error handling
+- Better generalization through hyperparameter optimization
+- Fixed WandB premature termination issue
+- Taxonomy feedback with separate project tracking
+- **Critical fix: LLM Judge rewards only apply during training, not evaluation**
+
+The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation during training only, and reliable experiment tracking with valid evaluation metrics.
