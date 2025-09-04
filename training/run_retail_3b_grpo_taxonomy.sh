@@ -13,7 +13,7 @@ EPOCHS=100
 # Replace this path with your SFT model path
 # POLICY_MODEL="/path/to/your/sft/model"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 # mcemri/qwen2.5_3b_alldata_sft_v0
-POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
+POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v1
 
