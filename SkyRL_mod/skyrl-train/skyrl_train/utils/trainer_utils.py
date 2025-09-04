@@ -244,14 +244,23 @@ def dump_per_dataset_eval_results(
 
         with open(filename, "w") as f:
             for i in indices:
+                # Extract full conversation history from env_extras if available
+                conversation_history = []
+                if concat_env_extras[i] and "conversation_history" in concat_env_extras[i]:
+                    conversation_history = concat_env_extras[i]["conversation_history"]
+                
                 entry = {
                     "input_prompt": input_prompts[i],
                     "output_response": output_responses[i],
+                    "conversation_history": conversation_history,  # Full conversation with user/tool responses
                     "score": concat_generator_outputs["rewards"][i],
                     "stop_reason": concat_generator_outputs.get("stop_reasons", [None] * len(input_prompts))[i],
                     "env_class": concat_all_envs[i],
                     "env_extras": concat_env_extras[i],
                     "data_source": data_source,
+                    "timestamp": concat_env_extras[i].get("timestamp") if concat_env_extras[i] else None,
+                    "domain": concat_env_extras[i].get("domain") if concat_env_extras[i] else None,
+                    "turns": concat_env_extras[i].get("turns") if concat_env_extras[i] else None,
                 }
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 

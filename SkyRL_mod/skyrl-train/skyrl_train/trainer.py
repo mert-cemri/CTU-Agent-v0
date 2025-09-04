@@ -355,6 +355,58 @@ class RayPPOTrainer:
 
         return eval_metrics
 
+    def _log_training_examples(self, generator_output: GeneratorOutput, example_uids: List[str]):
+        """Log training generation examples with full conversation histories."""
+        try:
+            # Only log occasionally to avoid spam (every 10 steps)
+            if self.global_step % 10 != 1:
+                return
+                
+            # Print one quick example to console
+            if generator_output["response_ids"]:
+                vis = self.tokenizer.decode(generator_output["response_ids"][0])
+                print(f"Training example (step {self.global_step}): {vis[:200]}...")
+            
+            # Save detailed examples to exports directory
+            if self.cfg.trainer.dump_eval_results and len(example_uids) > 0:
+                from pathlib import Path
+                import json
+                from datetime import datetime
+                
+                train_examples_dir = Path(self.cfg.trainer.export_path) / "training_examples"
+                train_examples_dir.mkdir(parents=True, exist_ok=True)
+                
+                examples_file = train_examples_dir / f"step_{self.global_step}_examples.jsonl"
+                
+                with open(examples_file, "w") as f:
+                    for i, uid in enumerate(example_uids):
+                        if i >= len(generator_output["response_ids"]):
+                            break
+                            
+                        # Get conversation history from rollout metadata if available
+                        conversation_history = []
+                        if "rollout_metadata" in generator_output and i < len(generator_output["rollout_metadata"]):
+                            metadata = generator_output["rollout_metadata"][i]
+                            if isinstance(metadata, dict) and "conversation_history" in metadata:
+                                conversation_history = metadata["conversation_history"]
+                        
+                        entry = {
+                            "global_step": self.global_step,
+                            "uid": uid,
+                            "input_prompt": self.tokenizer.decode(generator_output["prompt_token_ids"][i]),
+                            "output_response": self.tokenizer.decode(generator_output["response_ids"][i]),
+                            "conversation_history": conversation_history,  # Full conversation trajectory
+                            "reward": generator_output["rewards"][i],
+                            "stop_reason": generator_output.get("stop_reasons", [None] * len(example_uids))[i],
+                            "timestamp": str(datetime.now()),
+                        }
+                        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                
+                print(f"Saved {len(example_uids)} training examples to {examples_file}")
+                
+        except Exception as e:
+            logger.warning(f"Failed to log training examples: {e}")
+
     def train(self):
         """
         Main training loop for PPO
@@ -427,9 +479,8 @@ class RayPPOTrainer:
                         pbar.update(1)
                         continue
 
-                    # 2. print example just for debugging
-                    vis = self.tokenizer.decode(generator_output["response_ids"][0])
-                    print("example: ", vis)
+                    # 2. Log training examples and save to exports
+                    self._log_training_examples(generator_output, uids[:10])  # Log first 10 examples
 
                     with Timer("convert_to_training_input", self.all_timings):
                         training_input: TrainingInputBatch = self.convert_to_training_input(generator_output, uids)

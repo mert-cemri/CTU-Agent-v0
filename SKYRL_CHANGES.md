@@ -642,3 +642,199 @@ All changes maintain backward compatibility while adding:
 - **Critical fix: LLM Judge rewards only apply during training, not evaluation**
 
 The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation during training only, and reliable experiment tracking with valid evaluation metrics.
+
+---
+
+## Section 20: Enhanced Conversation Logging and Training Examples
+
+### Problem
+1. Evaluation logs only contained model responses, not full conversation trajectories with user/tool interactions
+2. No visibility into training generation quality during runs
+3. Missing context about domains, turns, and conversation flow
+
+### Solution
+Enhanced logging to capture complete conversation histories and training examples:
+
+#### A. Enhanced Evaluation Logging (`skyrl_train/utils/trainer_utils.py`)
+
+**Modified `dump_per_dataset_eval_results` function** (lines 246-265):
+```python
+# Before: Only logged input prompt and output response
+entry = {
+    "input_prompt": input_prompts[i],
+    "output_response": output_responses[i],
+    "score": concat_generator_outputs["rewards"][i],
+    ...
+}
+
+# After: Full conversation history with user/tool interactions
+# Extract full conversation history from env_extras if available
+conversation_history = []
+if concat_env_extras[i] and "conversation_history" in concat_env_extras[i]:
+    conversation_history = concat_env_extras[i]["conversation_history"]
+
+entry = {
+    "input_prompt": input_prompts[i],
+    "output_response": output_responses[i],
+    "conversation_history": conversation_history,  # Full conversation with user/tool responses
+    "score": concat_generator_outputs["rewards"][i],
+    "stop_reason": concat_generator_outputs.get("stop_reasons", [None] * len(input_prompts))[i],
+    "env_class": concat_all_envs[i],
+    "env_extras": concat_env_extras[i],
+    "data_source": data_source,
+    "timestamp": concat_env_extras[i].get("timestamp") if concat_env_extras[i] else None,
+    "domain": concat_env_extras[i].get("domain") if concat_env_extras[i] else None,
+    "turns": concat_env_extras[i].get("turns") if concat_env_extras[i] else None,
+}
+```
+
+#### B. Added Training Examples Logging (`skyrl_train/trainer.py`)
+
+1. **Replaced simple debug print** (line 430-432):
+```python
+# Before:
+vis = self.tokenizer.decode(generator_output["response_ids"][0])
+print("example: ", vis)
+
+# After:
+self._log_training_examples(generator_output, uids[:10])  # Log first 10 examples
+```
+
+2. **Added `_log_training_examples` method** (lines 358-407):
+```python
+def _log_training_examples(self, generator_output: GeneratorOutput, example_uids: List[str]):
+    """Log training generation examples with full conversation histories."""
+    try:
+        # Only log occasionally to avoid spam (every 10 steps)
+        if self.global_step % 10 != 1:
+            return
+            
+        # Print one quick example to console
+        if generator_output["response_ids"]:
+            vis = self.tokenizer.decode(generator_output["response_ids"][0])
+            print(f"Training example (step {self.global_step}): {vis[:200]}...")
+        
+        # Save detailed examples to exports directory
+        if self.cfg.trainer.dump_eval_results and len(example_uids) > 0:
+            from pathlib import Path
+            import json
+            from datetime import datetime
+            
+            train_examples_dir = Path(self.cfg.trainer.export_path) / "training_examples"
+            train_examples_dir.mkdir(parents=True, exist_ok=True)
+            
+            examples_file = train_examples_dir / f"step_{self.global_step}_examples.jsonl"
+            
+            with open(examples_file, "w") as f:
+                for i, uid in enumerate(example_uids):
+                    if i >= len(generator_output["response_ids"]):
+                        break
+                        
+                    # Get conversation history from rollout metadata if available
+                    conversation_history = []
+                    if "rollout_metadata" in generator_output and i < len(generator_output["rollout_metadata"]):
+                        metadata = generator_output["rollout_metadata"][i]
+                        if isinstance(metadata, dict) and "conversation_history" in metadata:
+                            conversation_history = metadata["conversation_history"]
+                    
+                    entry = {
+                        "global_step": self.global_step,
+                        "uid": uid,
+                        "input_prompt": self.tokenizer.decode(generator_output["prompt_token_ids"][i]),
+                        "output_response": self.tokenizer.decode(generator_output["response_ids"][i]),
+                        "conversation_history": conversation_history,  # Full conversation trajectory
+                        "reward": generator_output["rewards"][i],
+                        "stop_reason": generator_output.get("stop_reasons", [None] * len(example_uids))[i],
+                        "timestamp": str(datetime.now()),
+                    }
+                    f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            
+            print(f"Saved {len(example_uids)} training examples to {examples_file}")
+            
+    except Exception as e:
+        logger.warning(f"Failed to log training examples: {e}")
+```
+
+### Files Changed
+- **`SkyRL_mod/skyrl-train/skyrl_train/utils/trainer_utils.py`**: Lines 246-265 - Enhanced eval logging
+- **`SkyRL_mod/skyrl-train/skyrl_train/trainer.py`**: Lines 430-432, 358-407 - Added training examples logging
+
+### Impact
+- **Full conversation context**: Logs now include complete trajectories with user queries, assistant responses, tool calls, and tool results
+- **Training visibility**: Can monitor generation quality during training with 10 examples every 10 steps
+- **Debugging improvements**: Additional metadata (domain, turns, timestamp) helps identify issues
+- **Research enablement**: Complete conversation data enables analysis of multi-turn interactions
+
+### Output Structure
+Logged conversations now match the requested format:
+```json
+{
+  "conversation_history": [
+    {"role": "user", "content": "Find me a flight..."},
+    {"role": "assistant", "content": "I'll help you...", "tool_calls": [...]},
+    {"role": "tool", "name": "search_flights", "content": "{...}"},
+    {"role": "assistant", "content": "I found these flights..."}
+  ],
+  "domain": "airline",
+  "turns": 5,
+  "score": 1.0
+}
+```
+
+---
+
+## Section 21: Fixed Rewards=0 Issue and Configuration Problems
+
+### Problem
+All generation rewards were 0 due to `zero_reward_on_non_stop: true` configuration setting that zeroed rewards when conversations hit length limits or used EOS tokens.
+
+### Solution
+
+#### A. Disabled zero_reward_on_non_stop (`training/configs/tau_bench_config.yaml`, line 198)
+```yaml
+# Before:
+zero_reward_on_non_stop: true
+
+# After:
+zero_reward_on_non_stop: false  # CRITICAL: Set to false for tau_bench - conversations often hit length limit
+```
+
+#### B. Fixed total_steps Reference Error (`skyrl_train/trainer.py`, line 220)
+```python
+# Before:
+logger.info(f"[Eval Step {self.total_steps}] ...")
+
+# After:
+logger.info(f"[Eval Step {self.global_step}] ...")
+```
+
+#### C. Set Training Mode Early (`training/main_tau_bench.py`, line 7)
+```python
+# Added early to ensure training mode from start
+os.environ.setdefault("SKYRL_MODE", "train")
+```
+
+### Impact
+- Rewards now properly reflect task completion instead of being zeroed
+- Fixed attribute error that was causing logging failures
+- Ensures consistent training mode from initialization
+
+---
+
+## Summary
+
+All changes maintain backward compatibility while adding:
+- Native VLLM tool calling support
+- Multi-domain training capabilities
+- Test set evaluation during training
+- Improved logging and monitoring
+- Robust error handling
+- Better generalization through hyperparameter optimization
+- Fixed WandB premature termination issue
+- Taxonomy feedback with separate project tracking
+- **Critical fix: LLM Judge rewards only apply during training, not evaluation**
+- **Enhanced conversation logging with full trajectories**
+- **Training generation examples for monitoring**
+- **Fixed rewards=0 configuration issue**
+
+The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation during training only, reliable experiment tracking with valid evaluation metrics, and comprehensive conversation logging for analysis.

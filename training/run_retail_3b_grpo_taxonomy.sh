@@ -23,9 +23,10 @@ DATA_DIR="data/tau_bench_retail"
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
-# Make sure required directories exist
-CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail"
+# Make sure required directories exist with unique run names
+RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_taxonomy_${RUN_TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -42,9 +43,9 @@ export DEBUG_PARSER=0
 export TAXONOMY_FEEDBACK="true"
 export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
-# Conservative VLLM settings for memory
+# VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=20000
+export VLLM_MAX_MODEL_LEN=32768  # Increased for longer conversations
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -89,7 +90,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy_mini_batch_size=4 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
+  trainer.max_prompt_length=24576 \
   trainer.eval_batch_size=4 \
   trainer.eval_before_train=true \
   trainer.eval_interval=5 \
@@ -106,9 +107,9 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.async_engine=true \
   generator.n_samples_per_prompt=2 \
   generator.gpu_memory_utilization=0.4 \
-  generator.max_input_length=16384 \
+  generator.max_input_length=24576 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=512 \
+  generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
