@@ -15,7 +15,7 @@ EPOCHS=100
 # mcemri/qwen2.5_3b_alldata_sft_v0
 POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v1
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -86,8 +86,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=4 \
-  trainer.policy_mini_batch_size=2 \
+  trainer.train_batch_size=8 \
+  trainer.policy_mini_batch_size=4 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=24576 \
@@ -105,7 +105,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
+  generator.n_samples_per_prompt=4 \
   generator.gpu_memory_utilization=0.4 \
   generator.max_input_length=24576 \
   generator.enforce_eager=true \
