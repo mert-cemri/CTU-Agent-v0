@@ -838,3 +838,52 @@ All changes maintain backward compatibility while adding:
 - **Fixed rewards=0 configuration issue**
 
 The system now supports efficient multi-domain RL training with proper tool use across different domains, optional LLM Judge evaluation during training only, reliable experiment tracking with valid evaluation metrics, and comprehensive conversation logging for analysis.
+
+---
+
+## Section 22: Empty Response Handling and Memory Optimizations
+
+### Problem
+1. Generator returning empty responses causing `ValueError: zero-size array to reduction operation minimum`
+2. OOM errors during critic and policy training with 3B model
+3. Batch size configuration causing empty input batches
+
+### Solution
+
+#### A. Added Safety Check for Empty Responses (`skyrl_gym_generator.py`, lines 399-410)
+```python
+def _rollout_metrics(self, responses: List[List[int]], rewards: List[float]):
+    # Safety check for empty responses
+    if len(responses) == 0:
+        logger.warning("No responses generated in _rollout_metrics. Returning zero metrics.")
+        return {
+            "generate/min_num_tokens": 0,
+            "generate/max_num_tokens": 0,
+            "generate/avg_num_tokens": 0,
+            "generate/std_num_tokens": 0,
+            "generate/avg_tokens_non_zero_rewards": 0,
+            "generate/avg_tokens_zero_rewards": 0,
+        }
+```
+
+#### B. Added Generation Debugging Logs (`skyrl_gym_generator.py`)
+- Line 349: Log number of prompts received
+- Line 370: Log number of generation tasks started  
+- Line 378: Log number of outputs received
+
+#### C. Enabled CPU Offloading for Critic (`tau_bench_config.yaml`, line 76)
+```yaml
+critic:
+  fsdp_config:
+    cpu_offload: true  # Changed from false to reduce GPU memory
+```
+
+### Files Changed
+- **`SkyRL_mod/skyrl-train/skyrl_train/generators/skyrl_gym_generator.py`**: Lines 399-410, 349, 370, 378
+- **`training/configs/tau_bench_config.yaml`**: Line 76
+
+### Impact
+- Prevents crashes when generation fails or returns empty results
+- Provides debugging visibility into generation pipeline
+- Reduces GPU memory usage through CPU offloading
+- Maintains stability with proper error handling
