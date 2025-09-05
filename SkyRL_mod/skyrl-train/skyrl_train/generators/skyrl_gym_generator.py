@@ -345,8 +345,6 @@ class SkyRLGymGenerator(GeneratorInterface):
         sampling_params = input_batch.get("sampling_params", None)
         max_tokens = self.generator_cfg.sampling_params.max_generate_length
         max_input_length = self.generator_cfg.max_input_length
-        
-        logger.info(f"Generate called with {len(prompts)} prompts")
 
         if self.batched:
             return await self.generate_batched(
@@ -369,7 +367,6 @@ class SkyRLGymGenerator(GeneratorInterface):
 
         # TODO (erictang000): this is still synchronous RL - come back to this
         # for supporting fully async RL
-        logger.info(f"Starting generation with {len(tasks)} tasks")
         all_outputs = await tqdm.gather(
             *tasks,
             desc="Generating Trajectories",
@@ -377,7 +374,6 @@ class SkyRLGymGenerator(GeneratorInterface):
             mininterval=5,
         )
 
-        logger.info(f"Received {len(all_outputs)} outputs from tasks")
         responses = sum([[output[0]] for output in all_outputs], [])
         rewards = sum([[output[1]] for output in all_outputs], [])
         stop_reasons = sum([[output[2]] for output in all_outputs], [])
