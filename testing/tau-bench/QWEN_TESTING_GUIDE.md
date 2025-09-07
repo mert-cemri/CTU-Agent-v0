@@ -75,6 +75,17 @@ CUDA_VISIBLE_DEVICES=1 vllm serve sft/LLaMA-Factory/merged_models/merged-qwen2.5
 ```
 
 ```bash
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+CUDA_VISIBLE_DEVICES=3 vllm serve mcemri/qwen2.5-3b-rl-cut-agent-v3-step40-v0 \
+    --port 8001 \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
+    --trust-remote-code \
+    --max-model-len 32768 \
+    --gpu-memory-utilization 0.95
+```
+
+```bash
 vllm serve /path/to/your/finetuned/qwen2.5-3b \
     --port 8000 \
     --enable-auto-tool-choice \
@@ -88,6 +99,8 @@ Test your model:
 ./test_qwen_all.sh
 
 # Or manually test each domain
+python test_qwen.py --model "mcemri/qwen2.5-3b-rl-cut-agent-v3-step40-v0" --env retail  # All retail tasks
+
 python test_qwen.py --model "your-model-name" --env retail  # All retail tasks
 python test_qwen.py --model "your-model-name" --env airline # All airline tasks
 
