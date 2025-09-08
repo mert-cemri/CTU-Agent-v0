@@ -10,6 +10,7 @@ GPU_UTIL="${4:-0.35}"
 GPU_ID="${5:-0}"  # Default to GPU 0
 
 # bash start_vllm_server.sh mcemri/qwen2.5-3b-rl-cut-agent-v3-step40-v0 8000 65536 0.9 3
+# bash start_vllm_server.sh mcemri/qwen2.5_3b_alldata_sft_v0-step40-v0 8001 65536 0.9 7
 
 echo "=================================================="
 echo "         Starting VLLM Server"

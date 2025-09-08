@@ -76,6 +76,12 @@ python test.py --mode vllm \
     --max-concurrency 2 \
     --output-dir $OUTPUT_BASE/finetuned_retail_3b_taxonomy_v0
 
+python test.py --mode vllm \
+    --model mcemri/qwen2.5_3b_alldata_sft_v0-step40-v0 \
+    --base-url http://localhost:8001/v1 \
+    --env retail \
+    --max-concurrency 2 \
+    --output-dir $OUTPUT_BASE/finetuned_retail_3b_sft_v0
 # =============================================================================
 # TEMPERATURE COMPARISON
 # =============================================================================
