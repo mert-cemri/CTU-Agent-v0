@@ -87,6 +87,14 @@ class TauBenchTester:
         print(f"Testing Task {task_id} ({self.args.env})")
         print('='*50)
         
+        # Ensure API keys are available in worker threads  
+        import os
+        import litellm
+        
+        # Set API key explicitly for litellm in worker threads
+        if os.environ.get("OPENAI_API_KEY"):
+            litellm.api_key = os.environ.get("OPENAI_API_KEY")
+        
         # Create environment for this task
         env = get_env(
             self.args.env,
