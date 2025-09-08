@@ -43,7 +43,7 @@ export TAXONOMY_ALPHA="0.0"
 
 # VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=8192  # Conservative for memory
+# export VLLM_MAX_MODEL_LEN=16384  # Conservative for memory
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # PyTorch memory optimization
@@ -110,7 +110,6 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   +generator.sampling_params.repetition_penalty=1.05 \
   +generator.sampling_params.frequency_penalty=0.5 \
   +generator.sampling_params.presence_penalty=0.1 \
-  +generator.sampling_params.stop_sequences="['<|im_end|>','###STOP###']" \
   generator.override_existing_update_group="force_new" \
   generator.use_native_tool_calling=true \
   environment.env_class="tau_bench" \
