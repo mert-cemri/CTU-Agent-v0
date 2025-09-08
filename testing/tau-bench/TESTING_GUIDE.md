@@ -9,22 +9,7 @@ pip install -e .
 export OPENAI_API_KEY="your-api-key"  # For user simulator
 ```
 
-### 2. Easy Testing with Examples
-
-Use the example script with pre-configured commands:
-
-```bash
-# View all examples (everything commented out by default)
-bash run_tests.sh
-
-# Edit the script to uncomment desired examples
-nano run_tests.sh
-
-# Run your selected examples
-bash run_tests.sh
-```
-
-### 3. Testing Modes
+### 2. Testing Modes
 
 The unified `test.py` script supports three modes:
 
@@ -112,44 +97,30 @@ Each task result includes:
 
 ## VLLM Server Configuration
 
-### Using the Simplified Server Script
+### Memory-Optimized Settings
 
-```bash
-# Basic usage (GPU 0, conservative settings)
-bash start_vllm_server.sh
-
-# Specify model and GPU
-bash start_vllm_server.sh Qwen/Qwen2.5-3B-Instruct 8000 8192 0.35 0
-
-# Full parameter specification
-bash start_vllm_server.sh [MODEL] [PORT] [MAX_LEN] [GPU_UTIL] [GPU_ID]
-```
-
-### Multiple Server Setup (Different GPUs)
-
-```bash
-# Server 1: Base model on GPU 0
-bash start_vllm_server.sh Qwen/Qwen2.5-3B-Instruct 8000 8192 0.35 0 &
-
-# Server 2: Fine-tuned model on GPU 1  
-bash start_vllm_server.sh your-finetuned-model 8001 8192 0.35 1 &
-
-# Server 3: Larger model on GPU 2-3
-bash start_vllm_server.sh Qwen/Qwen2.5-7B-Instruct 8002 8192 0.4 2 &
-```
-
-### Memory-Optimized Settings by GPU Type
+Based on your GPU and requirements:
 
 #### For 8×A100 80GB (Your Setup)
 ```bash
-# Conservative (training compatible)
-bash start_vllm_server.sh your-model 8000 8192 0.3 0
+# Conservative for training compatibility
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+vllm serve your-model \
+    --port 8000 \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.3 \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
+    --trust-remote-code
 
-# Standard testing  
-bash start_vllm_server.sh your-model 8000 16384 0.4 0
-
-# Maximum performance
-bash start_vllm_server.sh your-model 8000 32768 0.6 0
+# Standard for testing only
+vllm serve your-model \
+    --port 8000 \
+    --max-model-len 16384 \
+    --gpu-memory-utilization 0.5 \
+    --enable-auto-tool-choice \
+    --tool-call-parser hermes \
+    --trust-remote-code
 ```
 
 #### For Different Models

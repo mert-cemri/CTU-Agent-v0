@@ -14,9 +14,9 @@ from tqdm import tqdm
 # Import tau_bench modules
 from tau_bench.envs import get_env
 from tau_bench.types import EnvRunResult, RunConfig
+from tau_bench.agents import get_agent
 from tau_bench.agents.vllm_agent import VLLMAgent
 from tau_bench.agents.qwen_vllm_agent import QwenVLLMAgent
-from tau_bench.run import agent_factory
 
 
 class TauBenchTester:
@@ -64,21 +64,14 @@ class TauBenchTester:
                     temperature=self.args.temperature
                 )
         else:
-            # Use standard tau-bench agent factory
-            config = RunConfig(
-                agent_strategy=self.args.agent_strategy,
-                model=self.args.model,
-                model_provider=self.args.model_provider,
-                temperature=self.args.temperature,
-                env=self.args.env,
-                user_strategy=self.args.user_strategy,
-                user_model=self.args.user_model,
-                user_model_provider=self.args.user_provider
-            )
-            return agent_factory(
+            # Use standard tau-bench agent
+            return get_agent(
+                self.args.agent_strategy,
                 tools_info=env.tools_info,
                 wiki=env.wiki,
-                config=config
+                model=self.args.model,
+                provider=self.args.model_provider,
+                temperature=self.args.temperature
             )
     
     def run_single_task(self, task_id: int) -> Dict:
@@ -86,14 +79,6 @@ class TauBenchTester:
         print(f"\n{'='*50}")
         print(f"Testing Task {task_id} ({self.args.env})")
         print('='*50)
-        
-        # Ensure API keys are available in worker threads  
-        import os
-        import litellm
-        
-        # Set API key explicitly for litellm in worker threads
-        if os.environ.get("OPENAI_API_KEY"):
-            litellm.api_key = os.environ.get("OPENAI_API_KEY")
         
         # Create environment for this task
         env = get_env(
