@@ -14,9 +14,9 @@ from tqdm import tqdm
 # Import tau_bench modules
 from tau_bench.envs import get_env
 from tau_bench.types import EnvRunResult, RunConfig
-from tau_bench.agents import get_agent
 from tau_bench.agents.vllm_agent import VLLMAgent
 from tau_bench.agents.qwen_vllm_agent import QwenVLLMAgent
+from tau_bench.run import agent_factory
 
 
 class TauBenchTester:
@@ -64,14 +64,21 @@ class TauBenchTester:
                     temperature=self.args.temperature
                 )
         else:
-            # Use standard tau-bench agent
-            return get_agent(
-                self.args.agent_strategy,
+            # Use standard tau-bench agent factory
+            config = RunConfig(
+                agent_strategy=self.args.agent_strategy,
+                model=self.args.model,
+                model_provider=self.args.model_provider,
+                temperature=self.args.temperature,
+                env=self.args.env,
+                user_strategy=self.args.user_strategy,
+                user_model=self.args.user_model,
+                user_model_provider=self.args.user_provider
+            )
+            return agent_factory(
                 tools_info=env.tools_info,
                 wiki=env.wiki,
-                model=self.args.model,
-                provider=self.args.model_provider,
-                temperature=self.args.temperature
+                config=config
             )
     
     def run_single_task(self, task_id: int) -> Dict:
