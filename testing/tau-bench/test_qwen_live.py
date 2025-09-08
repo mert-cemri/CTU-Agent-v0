@@ -147,11 +147,21 @@ class LiveConversationTester:
             self.print_task_result(task_id, result)
             
             # Format result in the required structure
+            # Convert task_info to serializable format
+            serializable_task = {}
+            if task_info:
+                if hasattr(task_info, 'model_dump'):
+                    serializable_task = task_info.model_dump()
+                elif hasattr(task_info, '__dict__'):
+                    serializable_task = {k: v for k, v in task_info.__dict__.items() if not k.startswith('_')}
+                else:
+                    serializable_task = str(task_info)
+            
             formatted_result = {
                 "task_id": task_id,
                 "reward": result.reward,
                 "info": {
-                    "task": task_info,
+                    "task": serializable_task,
                     "source": "user",
                     "user_cost": getattr(env.user, 'get_total_cost', lambda: 0.0)(),
                     "reward_info": {
@@ -171,11 +181,22 @@ class LiveConversationTester:
             
         except Exception as e:
             print(f"\n❌ Task {task_id} failed with error: {str(e)}")
+            
+            # Convert task_info to serializable format for error case
+            serializable_task = {}
+            if task_info:
+                if hasattr(task_info, 'model_dump'):
+                    serializable_task = task_info.model_dump()
+                elif hasattr(task_info, '__dict__'):
+                    serializable_task = {k: v for k, v in task_info.__dict__.items() if not k.startswith('_')}
+                else:
+                    serializable_task = str(task_info)
+            
             error_result = {
                 "task_id": task_id,
                 "reward": 0.0,
                 "info": {
-                    "task": task_info,
+                    "task": serializable_task,
                     "source": "error",
                     "user_cost": 0.0,
                     "error": str(e),
