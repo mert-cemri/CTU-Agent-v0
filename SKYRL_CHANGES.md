@@ -1,5 +1,75 @@
 # SkyRL Repository Changes for CTU-Agent-v0 Training Framework
 
+## Date: 2025-01-09
+
+### Section 23: Support for Qwen3-8B Model with Thinking Mode Disabled
+
+#### Purpose
+Enable support for Qwen/Qwen3-8B model and disable thinking mode in the tokenizer to prevent errors during training.
+
+#### Changes Made
+
+##### 1. Updated Training Script
+**File**: `/training/run_retail_8b_grpo_taxonomy.sh`
+- Changed model from `Qwen/Qwen3-8B-Base` to `Qwen/Qwen3-8B`
+- Reason: Base model doesn't have proper chat template support
+
+##### 2. Added Thinking Mode Disable Support
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/generators/skyrl_gym_generator.py`
+
+###### Added Helper Method (Lines 54-66)
+```python
+# Check if model is Qwen3 and needs thinking mode disabled
+self.is_qwen3_model = 'Qwen3' in getattr(tokenizer, 'name_or_path', '') or 'Qwen/Qwen3' in model_name
+
+def _apply_chat_template(self, messages, add_generation_prompt=True, tokenize=True, **kwargs):
+    """Helper method to apply chat template with enable_thinking=False for Qwen3 models"""
+    if self.is_qwen3_model:
+        kwargs["enable_thinking"] = False
+    return self.tokenizer.apply_chat_template(
+        messages,
+        add_generation_prompt=add_generation_prompt,
+        tokenize=tokenize,
+        **kwargs
+    )
+```
+
+###### Updated All apply_chat_template Calls
+Replaced all instances of `self.tokenizer.apply_chat_template()` with `self._apply_chat_template()` at the following lines:
+- Line 113: Initial prompt tokenization
+- Line 202: Response encoding with custom template
+- Line 330: Prompt token IDs generation
+- Line 519: Previous template state
+- Line 532: Re-apply chat template after adding responses
+- Line 540: Current template computation
+- Lines 594, 597: Observation encoding
+
+#### Why These Changes?
+
+1. **Qwen3 Models Have Thinking Mode**: By default, Qwen3 models use a "thinking mode" which adds internal reasoning tokens. This causes issues during tool-calling tasks in tau-bench.
+
+2. **enable_thinking=False**: This parameter disables the thinking mode, making the model responses more direct and compatible with the tau-bench environment.
+
+3. **Centralized Helper Method**: Instead of modifying each call individually, we created a helper method that automatically adds `enable_thinking=False` for Qwen3 models.
+
+#### Testing
+After these changes, the model should:
+- Properly handle chat templates without thinking tokens
+- Work correctly with tau-bench tool-calling tasks
+- Not produce the `IndexError: list index out of range` error
+
+#### Rollback Instructions
+To rollback these changes:
+1. In the training script, change back to `Qwen/Qwen3-8B-Base` if needed
+2. In skyrl_gym_generator.py:
+   - Remove the `_apply_chat_template` helper method (lines 57-66)
+   - Remove the `self.is_qwen3_model` initialization (lines 54-55)
+   - Replace all `self._apply_chat_template()` calls with `self.tokenizer.apply_chat_template()`
+
+---
+
+# SkyRL Repository Changes for CTU-Agent-v0 Training Framework
+
 This document lists all changes made to the SkyRL repository (`SkyRL_mod/skyrl-train/`) to support the CTU-Agent-v0 multi-domain training framework.
 
 ## Overview of Changes

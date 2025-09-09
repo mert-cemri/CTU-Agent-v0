@@ -10,8 +10,8 @@ TENSOR_PARALLEL_SIZE=4  # Use 4 GPUs per engine for 7B model
 EPOCHS=100
 
 # Model Configuration
-POLICY_MODEL="Qwen/Qwen3-8B-Base"
-REF_MODEL="Qwen/Qwen3-8B-Base"
+POLICY_MODEL="Qwen/Qwen3-8B"  # Changed from Qwen3-8B-Base
+REF_MODEL="Qwen/Qwen3-8B"
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v0
 
 # Data Configuration - Using retail domain only

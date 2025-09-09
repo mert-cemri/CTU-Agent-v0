@@ -50,6 +50,20 @@ class SkyRLGymGenerator(GeneratorInterface):
             )
         else:
             self.env_executor = None
+        
+        # Check if model is Qwen3 and needs thinking mode disabled
+        self.is_qwen3_model = 'Qwen3' in getattr(tokenizer, 'name_or_path', '') or 'Qwen/Qwen3' in model_name
+    
+    def _apply_chat_template(self, messages, add_generation_prompt=True, tokenize=True, **kwargs):
+        """Helper method to apply chat template with enable_thinking=False for Qwen3 models"""
+        if self.is_qwen3_model:
+            kwargs["enable_thinking"] = False
+        return self.tokenizer.apply_chat_template(
+            messages,
+            add_generation_prompt=add_generation_prompt,
+            tokenize=tokenize,
+            **kwargs
+        )
 
     async def agent_loop(
         self,
@@ -96,9 +110,8 @@ class SkyRLGymGenerator(GeneratorInterface):
         tools = None
         if self.use_native_tool_calling and metadata and "tools" in metadata:
             tools = metadata["tools"]
-        input_ids = self.tokenizer.apply_chat_template(
+        input_ids = self._apply_chat_template(
             chat_history,
-            # if we are keeping the chat history in token ids, we have to add the generation prompt to the original prompt
             add_generation_prompt=not self.use_conversation_multi_turn,
             tokenize=True,
         )
@@ -186,7 +199,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             print(f"   use_conversation_multi_turn: {self.use_conversation_multi_turn}")
             
         if self.custom_chat_template and self.use_conversation_multi_turn:
-            response_encodings = self.tokenizer.apply_chat_template(
+            response_encodings = self._apply_chat_template(
                 chat_history[len(prompt) :],
                 chat_template=self.custom_chat_template,
                 add_generation_prompt=False,
@@ -314,7 +327,7 @@ class SkyRLGymGenerator(GeneratorInterface):
 
             env.close()
 
-        prompt_token_ids = self.tokenizer.apply_chat_template(prompts, add_generation_prompt=True, tokenize=True)
+        prompt_token_ids = self._apply_chat_template(prompts, add_generation_prompt=True, tokenize=True)
         responses = truncated_responses
         rollout_metrics = self._rollout_metrics(responses, rewards)
 
@@ -503,7 +516,7 @@ class SkyRLGymGenerator(GeneratorInterface):
 
         # CRITICAL FIX: Get the template state BEFORE adding assistant response for proper comparison
         if not self.custom_chat_template:
-            prev_template = self.tokenizer.apply_chat_template(
+            prev_template = self._apply_chat_template(
                 chat_history[:chat_end_index], add_generation_prompt=False, tokenize=False
             )
 
@@ -516,7 +529,7 @@ class SkyRLGymGenerator(GeneratorInterface):
                 chat_history += new_obs
                 chat_end_index += len(new_obs)
             # re-apply whole chat template so length check is correct
-            input_ids = self.tokenizer.apply_chat_template(
+            input_ids = self._apply_chat_template(
                 chat_history[:chat_end_index], add_generation_prompt=False, tokenize=True
             )
             return chat_history, chat_end_index, loss_mask, input_ids
@@ -524,7 +537,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         # Use the pre-computed previous template and compute current template
         # The assistant message is now at index chat_end_index
         prev = prev_template
-        curr = self.tokenizer.apply_chat_template(
+        curr = self._apply_chat_template(
             chat_history[:chat_end_index + 1], add_generation_prompt=False, tokenize=False
         )
         
@@ -578,10 +591,10 @@ class SkyRLGymGenerator(GeneratorInterface):
 
             # Directly encode the observation content
             for _ in range(len(new_obs)):
-                prev = self.tokenizer.apply_chat_template(
+                prev = self._apply_chat_template(
                     chat_history[:chat_end_index], add_generation_prompt=False, tokenize=False
                 )
-                curr = self.tokenizer.apply_chat_template(
+                curr = self._apply_chat_template(
                     chat_history[: chat_end_index + 1], add_generation_prompt=False, tokenize=False
                 )
                 obs_tokens = self.tokenizer.encode(curr[len(prev) :], add_special_tokens=False)
