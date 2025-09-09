@@ -2,6 +2,60 @@
 
 ## Date: 2025-01-09
 
+### Section 24: Fixed IndexError During eval_before_train with Qwen3 Models
+
+#### Purpose
+Fix `IndexError: list index out of range` when using Qwen3 models with `eval_before_train=true` and custom chat templates.
+
+#### Root Cause
+During evaluation before training, `chat_history[len(prompt):]` returns an empty list because no assistant responses have been generated yet. The custom chat template code was trying to process this empty list, causing an IndexError.
+
+#### Changes Made
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/generators/skyrl_gym_generator.py`
+
+**Modified response extraction logic** (Lines 201-218):
+```python
+# Before: Always used custom template, causing IndexError on empty responses
+if self.custom_chat_template and self.use_conversation_multi_turn:
+    response_encodings = self._apply_chat_template(
+        chat_history[len(prompt) :],  # Could be empty during eval_before_train
+        chat_template=self.custom_chat_template,
+        ...
+    )
+
+# After: Check if responses exist before using custom template
+if self.custom_chat_template and self.use_conversation_multi_turn:
+    response_messages = chat_history[len(prompt):]
+    if len(response_messages) > 0:
+        # Process with custom template
+        response_encodings = self._apply_chat_template(
+            response_messages,
+            chat_template=self.custom_chat_template,
+            ...
+        )
+        loss_mask = response_encodings["assistant_masks"]
+        response_ids = response_encodings["input_ids"]
+    else:
+        # No responses generated yet (e.g., during eval_before_train)
+        response_ids = input_ids[initial_prompt_length:]
+        # loss_mask already set correctly above
+```
+
+#### Impact
+- **Fixed**: IndexError during `eval_before_train=true` with Qwen3 models
+- **Maintains**: Full custom chat template functionality when responses exist  
+- **Preserves**: Backward compatibility with all model types
+- **Enables**: Proper evaluation before training for Qwen3 models
+
+#### Testing
+This fix allows Qwen3 models to work properly with:
+- `eval_before_train=true` (no more IndexError)
+- Custom chat templates during actual training
+- Multi-turn conversation handling
+
+---
+
 ### Section 23: Support for Qwen3-8B Model with Thinking Mode Disabled
 
 #### Purpose

@@ -199,16 +199,23 @@ class SkyRLGymGenerator(GeneratorInterface):
             print(f"   use_conversation_multi_turn: {self.use_conversation_multi_turn}")
             
         if self.custom_chat_template and self.use_conversation_multi_turn:
-            response_encodings = self._apply_chat_template(
-                chat_history[len(prompt) :],
-                chat_template=self.custom_chat_template,
-                add_generation_prompt=False,
-                return_dict=True,
-                return_assistant_tokens_mask=True,
-                tokenize=True,
-            )
-            loss_mask = response_encodings["assistant_masks"]
-            response_ids = response_encodings["input_ids"]
+            # Only use custom template if we have actual responses to process
+            response_messages = chat_history[len(prompt):]
+            if len(response_messages) > 0:
+                response_encodings = self._apply_chat_template(
+                    response_messages,
+                    chat_template=self.custom_chat_template,
+                    add_generation_prompt=False,
+                    return_dict=True,
+                    return_assistant_tokens_mask=True,
+                    tokenize=True,
+                )
+                loss_mask = response_encodings["assistant_masks"]
+                response_ids = response_encodings["input_ids"]
+            else:
+                # No responses generated yet (e.g., during eval_before_train)
+                response_ids = input_ids[initial_prompt_length:]
+                # loss_mask already set correctly above
         else:
             response_ids = input_ids[initial_prompt_length:]
             if self.use_native_tool_calling and os.environ.get("DEBUG_PARSER", "0") == "1":
