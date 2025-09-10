@@ -1,17 +1,17 @@
 #!/bin/bash
 
-# GRPO + Taxonomy Feedback Training on Retail Domain - 8B Model
-# This script trains Qwen3-8B on retail domain with LLM Judge feedback
+# GRPO + Taxonomy Feedback Training on Retail Domain - 4B Model
+# This script trains Qwen3-4B-Instruct-2507 on retail domain with LLM Judge feedback
 
-# Configuration for 8B model
+# Configuration for 4B model
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4  # Use 4 GPUs per engine for 8B model
-EPOCHS=80
+TENSOR_PARALLEL_SIZE=2  # Only 2 GPUs per engine for 4B model
+EPOCHS=100
 
 # Model Configuration
-POLICY_MODEL="Qwen/Qwen3-8B"  # Changed from Qwen3-8B-Base
-REF_MODEL="Qwen/Qwen3-8B"
+POLICY_MODEL="Qwen/Qwen3-4B-Instruct-2507"
+REF_MODEL="Qwen/Qwen3-4B-Instruct-2507"
 MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v0
 
 # Data Configuration - Using retail domain only
@@ -37,11 +37,10 @@ export DEBUG_PARSER=0
 
 # Enable taxonomy feedback with configurable alpha
 export TAXONOMY_FEEDBACK="true"
-export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1"}
+export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1"}  # Slightly higher weight for 4B model
 
-# Enable VLLM settings (reduced for 7B model)
+# Enable VLLM settings (optimized for 4B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-# export VLLM_MAX_MODEL_LEN=16384  # Reduced from 32768 for 7B model
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -54,13 +53,13 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL/skyrl-train:$(pwd)/../SkyRL/sky
 ray stop || true
 
 echo "========================================="
-echo "Starting 8B GRPO + Taxonomy Training on Retail Domain"
+echo "Starting 4B GRPO + Taxonomy Training on Retail Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
 echo "Taxonomy Feedback: ENABLED (alpha=$TAXONOMY_ALPHA)"
-echo "WandB Project: tau_bench_retail_grpo_8b_with_taxonomy_feedback"
-echo "Memory Optimized: YES"
+echo "WandB Project: tau_bench_retail_grpo_4b_with_taxonomy"
+echo "Memory Optimized: YES (4B model - efficient settings)"
 echo "Simplified Reward Structure: ENABLED"
 echo ""
 
@@ -83,25 +82,25 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=32 \
-  trainer.policy_mini_batch_size=8 \
-  trainer.critic_mini_batch_size=8 \
-  trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.train_batch_size=48 \
+  trainer.policy_mini_batch_size=12 \
+  trainer.critic_mini_batch_size=12 \
+  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=2 \
   trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=16 \
+  trainer.eval_batch_size=24 \
   trainer.eval_before_train=true \
   trainer.eval_interval=10 \
-  trainer.policy.optimizer_config.lr=2.0e-7 \
+  trainer.policy.optimizer_config.lr=3.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=100 \
   trainer.policy.optimizer_config.weight_decay=0.05 \
   trainer.policy.optimizer_config.max_grad_norm=0.5 \
-  trainer.policy.optimizer_config.offload_after_step=true \
-  trainer.policy.fsdp_config.cpu_offload=true \
-  trainer.policy.fsdp_config.reshard_after_forward=true \
-  trainer.ref.fsdp_config.cpu_offload=true \
-  trainer.critic.fsdp_config.cpu_offload=true \
-  trainer.reward.fsdp_config.cpu_offload=true \
+  trainer.policy.optimizer_config.offload_after_step=false \
+  trainer.policy.fsdp_config.cpu_offload=false \
+  trainer.policy.fsdp_config.reshard_after_forward=false \
+  trainer.ref.fsdp_config.cpu_offload=false \
+  trainer.critic.fsdp_config.cpu_offload=false \
+  trainer.reward.fsdp_config.cpu_offload=false \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.01 \
   trainer.algorithm.eps_clip_low=0.1 \
@@ -116,8 +115,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
-  generator.gpu_memory_utilization=0.75 \
+  generator.n_samples_per_prompt=4 \
+  generator.gpu_memory_utilization=0.85 \
   generator.max_input_length=16384 \
   generator.max_num_batched_tokens=16384 \
   generator.enforce_eager=true \
@@ -136,10 +135,10 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=$TAXONOMY_ALPHA \
-  environment.skyrl_gym.max_env_workers=8 \
+  environment.skyrl_gym.max_env_workers=10 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo_8b" \
-  trainer.run_name="retail_8b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_retail_grpo_4b" \
+  trainer.run_name="retail_4b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \

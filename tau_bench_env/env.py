@@ -451,57 +451,97 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
             # self._log_conversation_rollout(parsed_action, tau_result)
             
-        # Calculate reward
+        # Calculate reward - SIMPLIFIED: Only outcome rewards, no intermediate shaping
         if done:
             # Final reward from tau_bench (0 or 1)
             reward = tau_result.reward
+            
+            # Add LLM Judge evaluation reward bonus (ONLY at conversation end)
+            # IMPORTANT: Only apply judge rewards during training, not evaluation
+            judge_reward_bonus = 0.0
+            is_training = os.environ.get("SKYRL_MODE", "train") == "train"
+            if self.llm_judge and self.llm_judge.enabled and is_training:
+                try:
+                    # Evaluate complete conversation for taxonomy feedback
+                    judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
+                    judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
+                    
+                    # Log judge evaluation for debugging
+                    if os.environ.get("DEBUG_PARSER", "0") == "1" and judge_result.get("evaluation"):
+                        print(f"\n🏛️ LLM JUDGE FINAL EVALUATION:")
+                        print(f"   Total failures: {judge_result['evaluation'].get('total_failures', 'N/A')}")
+                        print(f"   Alpha weight: {self.llm_judge.alpha}")
+                        print(f"   Raw bonus: {judge_reward_bonus / self.llm_judge.alpha:.3f}" if self.llm_judge.alpha > 0 else "N/A")
+                        print(f"   Weighted bonus: {judge_reward_bonus:.3f}")
+                        print(f"   Summary: {judge_result['evaluation'].get('summary', 'No summary')[:100]}...")
+                        
+                except Exception as e:
+                    # Handle API errors that might not be serializable across Ray workers
+                    error_message = str(e)
+                    if "InternalServerError" in str(type(e)) or "missing" in error_message and "positional arguments" in error_message:
+                        # Convert non-serializable API errors to simple messages
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ LLM JUDGE API ERROR (converted): {error_message}")
+                    else:
+                        # Log error but don't fail the step
+                        if os.environ.get("DEBUG_PARSER", "0") == "1":
+                            print(f"\n❌ LLM JUDGE ERROR: {e}")
+                    judge_reward_bonus = 0.0
+            
+            # Apply judge reward bonus to final reward
+            reward += judge_reward_bonus
         else:
-            # Intermediate reward shaping
+            # No intermediate rewards - clean outcome-based learning
             reward = 0.0
             
-            # Small reward for successful tool calls (not respond actions)
-            if parsed_action.name != RESPOND_ACTION_NAME:
-                reward += 0.1
-                
-            # Small penalty for malformed tool calls that fell back to respond
-            if self.use_native_tool_calling and isinstance(action, str) and '"tool_calls"' in action:
-                if parsed_action.name == RESPOND_ACTION_NAME:
-                    reward -= 0.05
-        
-        # Add LLM Judge evaluation reward bonus (both for done and intermediate steps)
-        # IMPORTANT: Only apply judge rewards during training, not evaluation
-        judge_reward_bonus = 0.0
-        is_training = os.environ.get("SKYRL_MODE", "train") == "train"
-        if self.llm_judge and self.llm_judge.enabled and is_training:
-            try:
-                # Evaluate current conversation state
-                judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
-                judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
-                
-                # Log judge evaluation for debugging
-                if os.environ.get("DEBUG_PARSER", "0") == "1" and judge_result.get("evaluation"):
-                    print(f"\n🏛️ LLM JUDGE EVALUATION:")
-                    print(f"   Total failures: {judge_result['evaluation'].get('total_failures', 'N/A')}")
-                    print(f"   Alpha weight: {self.llm_judge.alpha}")
-                    print(f"   Raw bonus: {judge_reward_bonus / self.llm_judge.alpha:.3f}" if self.llm_judge.alpha > 0 else "N/A")
-                    print(f"   Weighted bonus: {judge_reward_bonus:.3f}")
-                    print(f"   Summary: {judge_result['evaluation'].get('summary', 'No summary')[:100]}...")
-                    
-            except Exception as e:
-                # Handle API errors that might not be serializable across Ray workers
-                error_message = str(e)
-                if "InternalServerError" in str(type(e)) or "missing" in error_message and "positional arguments" in error_message:
-                    # Convert non-serializable API errors to simple messages
-                    if os.environ.get("DEBUG_PARSER", "0") == "1":
-                        print(f"\n❌ LLM JUDGE API ERROR (converted): {error_message}")
-                else:
-                    # Log error but don't fail the step
-                    if os.environ.get("DEBUG_PARSER", "0") == "1":
-                        print(f"\n❌ LLM JUDGE ERROR: {e}")
-                judge_reward_bonus = 0.0
-        
-        # Apply judge reward bonus to final reward
-        reward += judge_reward_bonus
+            # OLD INTERMEDIATE REWARD SHAPING (COMMENTED OUT - CAUSED LENGTH EXPLOITATION):
+            # # Intermediate reward shaping
+            # reward = 0.0
+            # 
+            # # Small reward for successful tool calls (not respond actions)
+            # if parsed_action.name != RESPOND_ACTION_NAME:
+            #     reward += 0.1
+            #     
+            # # Small penalty for malformed tool calls that fell back to respond
+            # if self.use_native_tool_calling and isinstance(action, str) and '"tool_calls"' in action:
+            #     if parsed_action.name == RESPOND_ACTION_NAME:
+            #         reward -= 0.05
+            
+            # OLD STEP-WISE TAXONOMY FEEDBACK (COMMENTED OUT - CAUSED LENGTH EXPLOITATION):
+            # # Add LLM Judge evaluation reward bonus (both for done and intermediate steps)
+            # # IMPORTANT: Only apply judge rewards during training, not evaluation
+            # judge_reward_bonus = 0.0
+            # is_training = os.environ.get("SKYRL_MODE", "train") == "train"
+            # if self.llm_judge and self.llm_judge.enabled and is_training:
+            #     try:
+            #         # Evaluate current conversation state
+            #         judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
+            #         judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
+            #         
+            #         # Log judge evaluation for debugging
+            #         if os.environ.get("DEBUG_PARSER", "0") == "1" and judge_result.get("evaluation"):
+            #             print(f"\n🏛️ LLM JUDGE EVALUATION:")
+            #             print(f"   Total failures: {judge_result['evaluation'].get('total_failures', 'N/A')}")
+            #             print(f"   Alpha weight: {self.llm_judge.alpha}")
+            #             print(f"   Raw bonus: {judge_reward_bonus / self.llm_judge.alpha:.3f}" if self.llm_judge.alpha > 0 else "N/A")
+            #             print(f"   Weighted bonus: {judge_reward_bonus:.3f}")
+            #             print(f"   Summary: {judge_result['evaluation'].get('summary', 'No summary')[:100]}...")
+            #             
+            #     except Exception as e:
+            #         # Handle API errors that might not be serializable across Ray workers
+            #         error_message = str(e)
+            #         if "InternalServerError" in str(type(e)) or "missing" in error_message and "positional arguments" in error_message:
+            #             # Convert non-serializable API errors to simple messages
+            #             if os.environ.get("DEBUG_PARSER", "0") == "1":
+            #                 print(f"\n❌ LLM JUDGE API ERROR (converted): {error_message}")
+            #         else:
+            #             # Log error but don't fail the step
+            #             if os.environ.get("DEBUG_PARSER", "0") == "1":
+            #                 print(f"\n❌ LLM JUDGE ERROR: {e}")
+            #         judge_reward_bonus = 0.0
+            # 
+            # # Apply judge reward bonus to final reward
+            # reward += judge_reward_bonus
         
         # Mark as done
         if done:

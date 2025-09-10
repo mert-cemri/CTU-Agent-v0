@@ -138,6 +138,10 @@ class Env(object):
         return consistent_hash(to_hashable(self.data))
 
     def calculate_reward(self) -> RewardResult:
+        from copy import deepcopy
+        
+        # CRITICAL FIX: Save current state before corruption
+        original_data = deepcopy(self.data)
         data_hash = self.get_data_hash()
         reward = 1.0
         actions = [
@@ -146,11 +150,16 @@ class Env(object):
 
         # Check if the database changes are correct. If they are not correct, then we set the reward to 0.
         # TODO: cache gt_data_hash in tasks.py (low priority)
+        # Use fresh environment for ground truth simulation
         self.data = self.data_load_func()
         for action in self.task.actions:
             if action.name not in self.terminate_tools:
                 self.step(action)
         gt_data_hash = self.get_data_hash()
+        
+        # CRITICAL FIX: Restore original state to prevent corruption
+        self.data = original_data
+        
         info = RewardActionInfo(
             r_actions=data_hash == gt_data_hash, gt_data_hash=gt_data_hash
         )

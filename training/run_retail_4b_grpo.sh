@@ -1,19 +1,18 @@
 #!/bin/bash
 
-# GRPO Training on Retail Domain - 3B Model (Vanilla)
-# This script trains Qwen2.5-3B-Instruct on retail domain only using standard GRPO
+# GRPO Training on Retail Domain - 4B Model (No Taxonomy)
+# This script trains Qwen3-4B-Instruct-2507 on retail domain with pure task-based rewards only
 
-# Configuration
+# Configuration for 4B model
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4
+TENSOR_PARALLEL_SIZE=2  # Only 2 GPUs per engine for 4B model
 EPOCHS=100
 
 # Model Configuration
-# Replace this path with your SFT model path
-POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "mcemri/qwen2.5_3b_alldata_sft_v0"
-REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_after_sft_v3
+POLICY_MODEL="Qwen/Qwen3-4B-Instruct-2507"
+REF_MODEL="Qwen/Qwen3-4B-Instruct-2507"
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v0
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -21,10 +20,9 @@ DATA_DIR="data/tau_bench_retail"
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
-# Make sure required directories exist with unique run names
-RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}_${RUN_TIMESTAMP}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_${RUN_TIMESTAMP}"
+# Make sure required directories exist
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -34,20 +32,14 @@ fi
 
 # Environment variables
 export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
-export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 export DEBUG_PARSER=0
 
-# Explicitly disable taxonomy feedback
+# Disable taxonomy feedback - pure task-based rewards only
 export TAXONOMY_FEEDBACK="false"
-export TAXONOMY_ALPHA="0.0"
 
-# VLLM settings for longer tau_bench conversations
+# Enable VLLM settings (for 4B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=8192  # Conservative for memory
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
-
-# PyTorch memory optimization
-export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 # Training command
 cd "$(dirname "$0")"
@@ -59,13 +51,14 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL/skyrl-train:$(pwd)/../SkyRL/sky
 ray stop || true
 
 echo "========================================="
-echo "Starting 3B GRPO Training (Vanilla) on Retail Domain"
+echo "Starting 4B GRPO Training on Retail Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
-echo "Taxonomy Feedback: DISABLED"
-echo "WandB Project: tau_bench_retail_grpo"
-echo "Conservative memory settings enabled"
+echo "Taxonomy Feedback: DISABLED (Pure task rewards)"
+echo "WandB Project: tau_bench_retail_grpo_4b_pure"
+echo "Memory Optimized: YES"
+echo "Simplified Reward Structure: ENABLED"
 echo ""
 
 HYDRA_FULL_ERROR=1 python main_tau_bench.py \
@@ -81,31 +74,48 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=8 \
-  trainer.policy_mini_batch_size=4 \
-  trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=8192 \
-  trainer.eval_batch_size=2 \
-  trainer.eval_before_train=false \
-  trainer.eval_interval=5 \
+  trainer.train_batch_size=48 \
+  trainer.policy_mini_batch_size=12 \
+  trainer.critic_mini_batch_size=12 \
+  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=2 \
+  trainer.max_prompt_length=16384 \
+  trainer.eval_batch_size=24 \
+  trainer.eval_before_train=true \
+  trainer.eval_interval=10 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
-  trainer.policy.optimizer_config.num_warmup_steps=200 \
+  trainer.policy.optimizer_config.num_warmup_steps=100 \
+  trainer.policy.optimizer_config.weight_decay=0.05 \
+  trainer.policy.optimizer_config.max_grad_norm=0.5 \
+  trainer.policy.optimizer_config.offload_after_step=false \
+  trainer.policy.fsdp_config.cpu_offload=false \
+  trainer.policy.fsdp_config.reshard_after_forward=false \
+  trainer.ref.fsdp_config.cpu_offload=false \
+  trainer.critic.fsdp_config.cpu_offload=false \
+  trainer.reward.fsdp_config.cpu_offload=false \
   trainer.algorithm.use_kl_loss=true \
-  trainer.algorithm.kl_loss_coef=0.02 \
-  trainer.ckpt_interval=5 \
+  trainer.algorithm.kl_loss_coef=0.01 \
+  trainer.algorithm.eps_clip_low=0.1 \
+  trainer.algorithm.eps_clip_high=0.1 \
+  trainer.algorithm.value_clip=0.1 \
+  trainer.ckpt_interval=10 \
   trainer.hf_save_interval=20 \
   trainer.use_sample_packing=false \
+  trainer.gradient_checkpointing=true \
+  trainer.gradient_checkpointing_use_reentrant=false \
   generator.max_turns=15 \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=2 \
-  generator.gpu_memory_utilization=0.3 \
-  generator.max_input_length=8192 \
+  generator.n_samples_per_prompt=4 \
+  generator.gpu_memory_utilization=0.85 \
+  generator.max_input_length=16384 \
+  generator.max_num_batched_tokens=16384 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=1024 \
-  generator.sampling_params.temperature=0.9 \
+  generator.enable_prefix_caching=false \
+  generator.enable_chunked_prefill=false \
+  generator.sampling_params.max_generate_length=512 \
+  generator.sampling_params.temperature=0.8 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
   generator.use_native_tool_calling=true \
@@ -116,11 +126,10 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.max_turns=10 \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
-  environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
-  environment.skyrl_gym.max_env_workers=12 \
+  environment.skyrl_gym.max_env_workers=10 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo" \
-  trainer.run_name="retail_3b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_retail_grpo_4b_pure" \
+  trainer.run_name="retail_4b_grpo_pure_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
@@ -129,3 +138,4 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
 echo "Exports saved to: $EXPORT_DIR"
+echo "Training approach: Pure task-based rewards (no taxonomy feedback)"

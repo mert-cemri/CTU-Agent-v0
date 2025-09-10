@@ -52,7 +52,7 @@ export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 cd "$(dirname "$0")"
 
 # Add SkyRL modules to Python path
-export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL/skyrl-train:$(pwd)/../SkyRL/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
 
 # Kill any existing Ray processes
 ray stop || true
