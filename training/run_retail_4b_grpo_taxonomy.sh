@@ -5,8 +5,8 @@
 
 # Configuration for 4B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=2  # Only 2 GPUs per engine for 4B model
+NUM_INFERENCE_ENGINES=4  # Increased to match total GPU count
+TENSOR_PARALLEL_SIZE=2  # 2 GPUs per engine * 4 engines = 8 GPUs total
 EPOCHS=100
 
 # Model Configuration
