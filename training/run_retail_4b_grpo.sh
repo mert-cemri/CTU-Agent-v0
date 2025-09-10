@@ -95,7 +95,6 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.reward.fsdp_config.cpu_offload=false \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.01 \
-  trainer.algorithm.policy_loss_type="regular" \
   trainer.algorithm.eps_clip_low=0.1 \
   trainer.algorithm.eps_clip_high=0.1 \
   trainer.algorithm.value_clip=0.1 \
