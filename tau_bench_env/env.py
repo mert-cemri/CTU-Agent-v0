@@ -451,36 +451,56 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
         # if os.environ.get("DEBUG_PARSER", "0") == "1" and self.turns % 5 == 0:  # Log every 5 turns
             # self._log_conversation_rollout(parsed_action, tau_result)
             
+        # ========================================================================
+        # SIMPLIFIED REWARD STRUCTURE (2025-01-10)
+        # Changed to eliminate length exploitation in GRPO training
+        # See SIMPLIFIED_REWARD_STRUCTURE.md for full details
+        # ========================================================================
+        
         # Calculate reward
         if done:
             # Final reward from tau_bench (0 or 1)
             reward = tau_result.reward
         else:
-            # Intermediate reward shaping
+            # No intermediate rewards to prevent length exploitation
             reward = 0.0
             
-            # Small reward for successful tool calls (not respond actions)
-            if parsed_action.name != RESPOND_ACTION_NAME:
-                reward += 0.1
-                
-            # Small penalty for malformed tool calls that fell back to respond
-            if self.use_native_tool_calling and isinstance(action, str) and '"tool_calls"' in action:
-                if parsed_action.name == RESPOND_ACTION_NAME:
-                    reward -= 0.05
+        # ========================================================================
+        # OLD INTERMEDIATE REWARD SHAPING (COMMENTED OUT)
+        # This code added +0.1 for tool calls, encouraging longer conversations
+        # ========================================================================
+        # if not done:
+        #     # Intermediate reward shaping
+        #     reward = 0.0
+        #     
+        #     # Small reward for successful tool calls (not respond actions)
+        #     if parsed_action.name != RESPOND_ACTION_NAME:
+        #         reward += 0.1
+        #         
+        #     # Small penalty for malformed tool calls that fell back to respond
+        #     if self.use_native_tool_calling and isinstance(action, str) and '"tool_calls"' in action:
+        #         if parsed_action.name == RESPOND_ACTION_NAME:
+        #             reward -= 0.05
         
-        # Add LLM Judge evaluation reward bonus (both for done and intermediate steps)
+        # ========================================================================
+        # LLM JUDGE EVALUATION - NOW ONLY AT END OF CONVERSATION
+        # Previously evaluated at every step, now only when done=True
+        # ========================================================================
+        
         # IMPORTANT: Only apply judge rewards during training, not evaluation
         judge_reward_bonus = 0.0
         is_training = os.environ.get("SKYRL_MODE", "train") == "train"
-        if self.llm_judge and self.llm_judge.enabled and is_training:
+        
+        # Only evaluate at the end of conversation (when done=True)
+        if done and self.llm_judge and self.llm_judge.enabled and is_training:
             try:
-                # Evaluate current conversation state
+                # Evaluate complete conversation
                 judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
                 judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
                 
                 # Log judge evaluation for debugging
                 if os.environ.get("DEBUG_PARSER", "0") == "1" and judge_result.get("evaluation"):
-                    print(f"\n🏛️ LLM JUDGE EVALUATION:")
+                    print(f"\n🏛️ LLM JUDGE EVALUATION (END OF CONVERSATION):")
                     print(f"   Total failures: {judge_result['evaluation'].get('total_failures', 'N/A')}")
                     print(f"   Alpha weight: {self.llm_judge.alpha}")
                     print(f"   Raw bonus: {judge_reward_bonus / self.llm_judge.alpha:.3f}" if self.llm_judge.alpha > 0 else "N/A")
@@ -499,6 +519,20 @@ Remember: When you need to use a tool, output ONLY the JSON object, nothing else
                     if os.environ.get("DEBUG_PARSER", "0") == "1":
                         print(f"\n❌ LLM JUDGE ERROR: {e}")
                 judge_reward_bonus = 0.0
+        
+        # ========================================================================
+        # OLD STEP-WISE TAXONOMY FEEDBACK (COMMENTED OUT)
+        # This accumulated rewards at each step, favoring longer conversations
+        # ========================================================================
+        # if not done and self.llm_judge and self.llm_judge.enabled and is_training:
+        #     try:
+        #         # Evaluate current conversation state at each step
+        #         judge_result = self.llm_judge.evaluate_conversation_step(self.conversation_history)
+        #         judge_reward_bonus = judge_result.get("reward_bonus", 0.0)
+        #         
+        #         # [Rest of step-wise evaluation code...]
+        #     except Exception as e:
+        #         judge_reward_bonus = 0.0
         
         # Apply judge reward bonus to final reward
         reward += judge_reward_bonus
