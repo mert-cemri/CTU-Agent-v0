@@ -5,8 +5,8 @@
 
 # Configuration for 4B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=4  # Increased to match total GPU count
-TENSOR_PARALLEL_SIZE=2  # 2 GPUs per engine * 4 engines = 8 GPUs total
+NUM_INFERENCE_ENGINES=2  # Same as 8B model for better memory efficiency
+TENSOR_PARALLEL_SIZE=4  # Same as 8B model (2 engines × 4 GPUs = 8 total)
 EPOCHS=100
 
 # Model Configuration
@@ -115,8 +115,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=2 \
-  generator.gpu_memory_utilization=0.4 \
+  generator.n_samples_per_prompt=4 \
+  generator.gpu_memory_utilization=0.3 \
   generator.max_input_length=16384 \
   generator.max_num_batched_tokens=16384 \
   generator.enforce_eager=true \
