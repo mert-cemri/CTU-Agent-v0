@@ -20,9 +20,12 @@ DATA_DIR="data/tau_bench_retail"
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
+# Generate timestamp for unique export directories
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_4b_taxonomy_${TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -95,12 +98,12 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy.optimizer_config.num_warmup_steps=100 \
   trainer.policy.optimizer_config.weight_decay=0.05 \
   trainer.policy.optimizer_config.max_grad_norm=0.5 \
-  trainer.policy.optimizer_config.offload_after_step=false \
-  trainer.policy.fsdp_config.cpu_offload=false \
-  trainer.policy.fsdp_config.reshard_after_forward=false \
-  trainer.ref.fsdp_config.cpu_offload=false \
-  trainer.critic.fsdp_config.cpu_offload=false \
-  trainer.reward.fsdp_config.cpu_offload=false \
+  trainer.policy.optimizer_config.offload_after_step=true \
+  trainer.policy.fsdp_config.cpu_offload=true \
+  trainer.policy.fsdp_config.reshard_after_forward=true \
+  trainer.ref.fsdp_config.cpu_offload=true \
+  trainer.critic.fsdp_config.cpu_offload=true \
+  trainer.reward.fsdp_config.cpu_offload=true \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.01 \
   trainer.algorithm.eps_clip_low=0.1 \
@@ -115,8 +118,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=4 \
-  generator.gpu_memory_utilization=0.3 \
+  generator.n_samples_per_prompt=3 \
+  generator.gpu_memory_utilization=0.75 \
   generator.max_input_length=16384 \
   generator.max_num_batched_tokens=16384 \
   generator.enforce_eager=true \
@@ -125,6 +128,11 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.sampling_params.max_generate_length=512 \
   generator.sampling_params.temperature=0.8 \
   generator.sampling_params.top_p=0.9 \
+  +generator.sampling_params.repetition_penalty=1.05 \
+  +generator.sampling_params.frequency_penalty=0.5 \
+  +generator.sampling_params.presence_penalty=0.1 \
+  +generator.zero_reward_on_length_threshold=true \
+  +generator.max_assistant_response_tokens=2048 \
   generator.override_existing_update_group="force_new" \
   generator.use_native_tool_calling=true \
   environment.env_class="tau_bench" \

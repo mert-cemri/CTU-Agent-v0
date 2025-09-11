@@ -261,7 +261,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             print(f"   response_ids preview: {response_ids[:20] if response_ids else 'EMPTY'}")
             print(f"   reward: {reward}")
 
-        return response_ids, reward, stop_reason, loss_mask, prompt_ids
+        return response_ids, reward, stop_reason, loss_mask, prompt_ids, chat_history
 
     async def generate_batched(
         self,
@@ -318,8 +318,9 @@ class SkyRLGymGenerator(GeneratorInterface):
         truncated_responses = []
         rewards = []
         loss_masks = []
+        conversation_histories = []
 
-        for response, env in zip(responses, envs):
+        for i, (response, env, init_prompt) in enumerate(zip(responses, envs, init_prompts)):
             # step on function and compute reward
             env_step_output: BaseTextEnvStepOutput = env.step(response)
             reward = env_step_output["reward"]
@@ -332,11 +333,20 @@ class SkyRLGymGenerator(GeneratorInterface):
             loss_masks.append([1] * len(response_ids))
             truncated_responses.append(response_ids)
 
+            # Create conversation history for batched case (single turn)
+            conversation_history = copy.deepcopy(init_prompt)
+            conversation_history.append({"role": "assistant", "content": response})
+            conversation_histories.append(conversation_history)
+
             env.close()
 
         prompt_token_ids = self._apply_chat_template(prompts, add_generation_prompt=True, tokenize=True)
         responses = truncated_responses
         rollout_metrics = self._rollout_metrics(responses, rewards)
+        
+        # Apply length-based reward filtering for batched generation as well
+        if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
+            rewards = self._zero_reward_on_length_threshold(rewards, responses)
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -345,6 +355,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             "loss_masks": loss_masks,
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
+            "conversation_histories": conversation_histories,
         }
 
         return generator_output
@@ -399,11 +410,16 @@ class SkyRLGymGenerator(GeneratorInterface):
         stop_reasons = sum([[output[2]] for output in all_outputs], [])
         loss_masks = sum([[output[3]] for output in all_outputs], [])
         prompt_token_ids = sum([[output[4]] for output in all_outputs], [])
+        conversation_histories = sum([[output[5]] for output in all_outputs], [])
 
         rollout_metrics = self._rollout_metrics(responses, rewards)
         if self.generator_cfg.zero_reward_on_non_stop:
             # set reward to 0 if the stop reason is not "stop"
             rewards = self._zero_reward_if_not_stop(rewards, stop_reasons)
+        
+        if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
+            # set reward to 0 if response length exceeds threshold (DAPO-style filtering)
+            rewards = self._zero_reward_on_length_threshold(rewards, responses)
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -412,6 +428,7 @@ class SkyRLGymGenerator(GeneratorInterface):
             "loss_masks": loss_masks,
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
+            "conversation_histories": conversation_histories,
         }
 
         return generator_output
@@ -450,6 +467,32 @@ class SkyRLGymGenerator(GeneratorInterface):
         for i, stop_reason in enumerate(stop_reasons):
             if stop_reason != "stop":
                 rewards[i] = 0.0
+        return rewards
+
+    def _zero_reward_on_length_threshold(self, rewards: List[float], responses: List[List[int]]):
+        """Sets the reward to 0 if the response length exceeds the specified threshold.
+        
+        This implements DAPO-style length-based filtering where overly long responses receive zero reward.
+        Useful for preventing reward hacking through verbose responses and encouraging conciseness.
+        
+        Args:
+            rewards: List of reward values
+            responses: List of response token sequences
+            
+        Returns:
+            List of filtered reward values
+        """
+        max_tokens = getattr(self.generator_cfg, 'max_assistant_response_tokens', 2048)
+        filtered_count = 0
+        
+        for i, response_tokens in enumerate(responses):
+            if len(response_tokens) > max_tokens:
+                rewards[i] = 0.0
+                filtered_count += 1
+        
+        if filtered_count > 0:
+            print(f"Length filtering: Set {filtered_count}/{len(responses)} responses to zero reward (>{max_tokens} tokens)")
+            
         return rewards
 
     def _update_engine_input_chat_history(

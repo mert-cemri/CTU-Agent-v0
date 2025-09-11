@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# GRPO Training on Retail Domain - 4B Model (No Taxonomy)
-# This script trains Qwen3-4B-Instruct-2507 on retail domain with pure task-based rewards only
+# GRPO Fast Learning - 4B Model (Optimized Hyperparameters)
+# This script trains Qwen3-4B-Instruct-2507 with aggressive hyperparameters for faster learning
 
 # Configuration for 4B model
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2  # Same as 8B model for better memory efficiency
 TENSOR_PARALLEL_SIZE=4  # Same as 8B model (2 engines × 4 GPUs = 8 total)
-EPOCHS=100
+EPOCHS=60  # Fewer epochs since we're learning faster
 
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen3-4B-Instruct-2507"
 REF_MODEL="Qwen/Qwen3-4B-Instruct-2507"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v0
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_fast_learning_v0
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -25,7 +25,7 @@ TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_4b_${TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_4b_fast_${TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -37,7 +37,7 @@ fi
 export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export DEBUG_PARSER=0
 
-# Disable taxonomy feedback - pure task-based rewards only
+# Disable taxonomy feedback - pure task-based rewards for faster learning
 export TAXONOMY_FEEDBACK="false"
 
 # Enable VLLM settings (for 4B model)
@@ -54,15 +54,19 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 ray stop || true
 
 echo "========================================="
-echo "Starting 4B GRPO Training on Retail Domain"
+echo "Starting 4B FAST LEARNING GRPO Training on Retail Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
-echo "Taxonomy Feedback: DISABLED (Pure task rewards)"
-echo "WandB Project: tau_bench_retail_grpo_4b_pure"
-echo "Memory Optimized: YES"
-echo "Simplified Reward Structure: ENABLED"
-echo ""
+echo "Learning Mode: AGGRESSIVE (Fast Convergence)"
+echo "Key Changes:"
+echo "  - Higher learning rate: 5e-7"
+echo "  - Lower KL penalty: 0.005"
+echo "  - Larger PPO clip range: 0.2"
+echo "  - More mini-batch updates: 8"
+echo "  - Shorter warmup: 50 steps"
+echo "  - Higher temperature: 0.9"
+echo "========================================="
 
 HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy.model.path="$POLICY_MODEL" \
@@ -77,32 +81,34 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=8 \
-  trainer.policy_mini_batch_size=4 \
-  trainer.critic_mini_batch_size=4 \
+  trainer.train_batch_size=16 \
+  trainer.policy_mini_batch_size=8 \
+  trainer.critic_mini_batch_size=8 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=4 \
   trainer.eval_before_train=true \
-  trainer.eval_interval=10 \
-  trainer.policy.optimizer_config.lr=3.0e-7 \
-  trainer.policy.optimizer_config.num_warmup_steps=100 \
-  trainer.policy.optimizer_config.weight_decay=0.05 \
-  trainer.policy.optimizer_config.max_grad_norm=0.5 \
+  trainer.eval_interval=5 \
+  trainer.policy.optimizer_config.lr=5.0e-7 \
+  trainer.policy.optimizer_config.num_warmup_steps=50 \
+  trainer.policy.optimizer_config.weight_decay=0.01 \
+  trainer.policy.optimizer_config.max_grad_norm=1.0 \
   trainer.policy.optimizer_config.offload_after_step=true \
+  trainer.critic.optimizer_config.lr=8.0e-6 \
   trainer.policy.fsdp_config.cpu_offload=true \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.ref.fsdp_config.cpu_offload=true \
   trainer.critic.fsdp_config.cpu_offload=true \
   trainer.reward.fsdp_config.cpu_offload=true \
   trainer.algorithm.use_kl_loss=true \
-  trainer.algorithm.kl_loss_coef=0.01 \
-  trainer.algorithm.eps_clip_low=0.1 \
-  trainer.algorithm.eps_clip_high=0.1 \
-  trainer.algorithm.value_clip=0.1 \
-  trainer.ckpt_interval=10 \
-  trainer.hf_save_interval=20 \
+  trainer.algorithm.kl_loss_coef=0.005 \
+  trainer.algorithm.eps_clip_low=0.2 \
+  trainer.algorithm.eps_clip_high=0.2 \
+  trainer.algorithm.value_clip=0.2 \
+  trainer.algorithm.advantage_batch_normalize=true \
+  trainer.ckpt_interval=5 \
+  trainer.hf_save_interval=10 \
   trainer.use_sample_packing=false \
   trainer.gradient_checkpointing=true \
   trainer.gradient_checkpointing_use_reentrant=false \
@@ -118,8 +124,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
   generator.sampling_params.max_generate_length=512 \
-  generator.sampling_params.temperature=0.8 \
-  generator.sampling_params.top_p=0.9 \
+  generator.sampling_params.temperature=0.9 \
+  generator.sampling_params.top_p=0.95 \
   +generator.sampling_params.repetition_penalty=1.05 \
   +generator.sampling_params.frequency_penalty=0.5 \
   +generator.sampling_params.presence_penalty=0.1 \
@@ -136,14 +142,14 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
   environment.skyrl_gym.max_env_workers=10 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo_4b_pure" \
-  trainer.run_name="retail_4b_grpo_pure_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_retail_grpo_4b_fast" \
+  trainer.run_name="retail_4b_grpo_fast_learning_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
   $@
 
-echo "Training completed!"
+echo "Fast learning training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
 echo "Exports saved to: $EXPORT_DIR"
-echo "Training approach: Pure task-based rewards (no taxonomy feedback)"
+echo "Training approach: Aggressive hyperparameters for faster convergence"

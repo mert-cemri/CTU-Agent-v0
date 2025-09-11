@@ -48,6 +48,257 @@ if self.custom_chat_template and self.use_conversation_multi_turn:
 - **Preserves**: Backward compatibility with all model types
 - **Enables**: Proper evaluation before training for Qwen3 models
 
+---
+
+## Date: 2025-01-11
+
+### Section 25: Clean Conversation History Export and Length-based Reward Filtering
+
+#### Purpose
+1. Fix malformed conversation exports containing special tokens (`<|im_start|>`, `<|im_end|>`)
+2. Implement DAPO-style length-based reward filtering to prevent reward hacking through verbose responses
+
+#### Problem Description
+**Conversation Export Issues**:
+- Exported training examples and evaluation dumps contained chat template special tokens
+- Conversation structure was reconstructed from tokenized outputs instead of using clean source data
+- Result: Malformed logs like `"<|im_start|>user\nHi there!<|im_end|>"`
+
+**Need for Length Filtering**:
+- Models could exploit rewards by generating excessively long responses
+- No mechanism to penalize verbosity (DAPO paper approach needed)
+
+#### Changes Made
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/generators/skyrl_gym_generator.py`
+
+**1. Enhanced agent_loop return value** (Line 264):
+```python
+# Before: Lost clean chat_history 
+return response_ids, reward, stop_reason, loss_mask, prompt_ids
+
+# After: Preserve clean conversation structure
+return response_ids, reward, stop_reason, loss_mask, prompt_ids, chat_history
+```
+
+**2. Updated generate() method** (Lines 397-418):
+```python
+# Before: Only basic generator output fields
+responses = sum([[output[0]] for output in all_outputs], [])
+rewards = sum([[output[1]] for output in all_outputs], [])
+# ... other fields
+
+# After: Include conversation histories and length filtering
+responses = sum([[output[0]] for output in all_outputs], [])
+rewards = sum([[output[1]] for output in all_outputs], [])
+# ... other fields
+conversation_histories = sum([[output[5]] for output in all_outputs], [])
+
+# Apply length-based filtering
+if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
+    rewards = self._zero_reward_on_length_threshold(rewards, responses)
+
+generator_output: GeneratorOutput = {
+    # ... existing fields
+    "conversation_histories": conversation_histories,
+}
+```
+
+**3. Enhanced generate_batched() method** (Lines 321-355):
+```python
+# Added conversation history creation for batched case
+conversation_histories = []
+for i, (response, env, init_prompt) in enumerate(zip(responses, envs, init_prompts)):
+    # ... existing logic
+    
+    # Create conversation history for batched case (single turn)
+    conversation_history = copy.deepcopy(init_prompt)
+    conversation_history.append({"role": "assistant", "content": response})
+    conversation_histories.append(conversation_history)
+
+# Apply length filtering for batched generation
+if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
+    rewards = self._zero_reward_on_length_threshold(rewards, responses)
+```
+
+**4. Implemented length-based reward filtering** (Lines 468-492):
+```python
+def _zero_reward_on_length_threshold(self, rewards: List[float], responses: List[List[int]]):
+    """Sets the reward to 0 if the response length exceeds the specified threshold.
+    
+    This implements DAPO-style length-based filtering where overly long responses receive zero reward.
+    Useful for preventing reward hacking through verbose responses and encouraging conciseness.
+    """
+    max_tokens = getattr(self.generator_cfg, 'max_assistant_response_tokens', 2048)
+    filtered_count = 0
+    
+    for i, response_tokens in enumerate(responses):
+        if len(response_tokens) > max_tokens:
+            rewards[i] = 0.0
+            filtered_count += 1
+    
+    if filtered_count > 0:
+        print(f"Length filtering: Set {filtered_count}/{len(responses)} responses to zero reward (>{max_tokens} tokens)")
+        
+    return rewards
+```
+
+---
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/generators/utils.py`
+
+**5. Updated concatenate_generator_outputs()** (Lines 84-87):
+```python
+# Before: Only basic field concatenation
+if "stop_reasons" in generator_outputs[0]:
+    result["stop_reasons"] = sum([output["stop_reasons"] for output in generator_outputs], [])
+
+# After: Include conversation histories
+if "stop_reasons" in generator_outputs[0]:
+    result["stop_reasons"] = sum([output["stop_reasons"] for output in generator_outputs], [])
+if "conversation_histories" in generator_outputs[0]:
+    result["conversation_histories"] = sum([output["conversation_histories"] for output in generator_outputs], [])
+```
+
+---
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/utils/trainer_utils.py`
+
+**6. Completely rewritten dump_per_dataset_eval_results()** (Lines 216-316):
+```python
+def dump_per_dataset_eval_results(
+    dump_dir_path: Path,
+    tokenizer: AutoTokenizer,
+    concat_generator_outputs: GeneratorOutput,
+    # ... other parameters
+):
+    """Dump evaluation results per dataset and overall aggregated results."""
+
+    def get_clean_conversation(
+        conversation_history: Optional[List[Dict[str, str]]], 
+        env_extras: Dict[str, Any], 
+        prompt_tokens: List[int], 
+        response_tokens: List[int]
+    ) -> List[Dict[str, str]]:
+        """Get clean conversation history from generator output or fallback to token parsing."""
+        # First priority: use conversation_history from generator output (cleanest)
+        if conversation_history and isinstance(conversation_history, list) and len(conversation_history) > 0:
+            if isinstance(conversation_history[0], dict) and "role" in conversation_history[0] and "content" in conversation_history[0]:
+                return conversation_history
+        
+        # Second priority: use conversation_history from env_extras if available
+        if env_extras and "conversation_history" in env_extras and env_extras["conversation_history"]:
+            env_conversation_history = env_extras["conversation_history"]
+            if isinstance(env_conversation_history, list) and len(env_conversation_history) > 0:
+                if isinstance(env_conversation_history[0], dict) and "role" in env_conversation_history[0] and "content" in env_conversation_history[0]:
+                    return env_conversation_history
+        
+        # Fallback: create clean conversation from token decoding (legacy compatibility)
+        messages = []
+        if prompt_tokens:
+            prompt_content = tokenizer.decode(prompt_tokens, skip_special_tokens=True).strip()
+            if prompt_content:
+                messages.append({"role": "user", "content": prompt_content})
+        if response_tokens:
+            response_content = tokenizer.decode(response_tokens, skip_special_tokens=True).strip()
+            if response_content:
+                messages.append({"role": "assistant", "content": response_content})
+        
+        return messages
+
+    # Updated export logic
+    with open(filename, "w") as f:
+        for i in indices:
+            # Get clean conversation from generator output or fallback to parsing
+            generator_conversation = concat_generator_outputs.get("conversation_histories", [None] * len(indices))[i]
+            conversation = get_clean_conversation(
+                generator_conversation,
+                concat_env_extras[i],
+                concat_generator_outputs["prompt_token_ids"][i],
+                concat_generator_outputs["response_ids"][i]
+            )
+            
+            entry = {
+                "conversation": conversation,  # Clean message array format (primary)
+                "input_prompt": input_prompt,  # Legacy field for backward compatibility  
+                "output_response": output_response,  # Legacy field for backward compatibility
+                # ... other fields
+            }
+```
+
+---
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/trainer.py`
+
+**7. Updated _log_training_examples()** (Lines 386-409):
+```python
+# Before: Used complex token decoding with special tokens
+"input_prompt": self.tokenizer.decode(generator_output["prompt_token_ids"][i]),
+"output_response": self.tokenizer.decode(generator_output["response_ids"][i]),
+"conversation_history": conversation_history,
+
+# After: Use clean conversation from generator + clean decoding
+conversation_history = []
+if "conversation_histories" in generator_output and i < len(generator_output["conversation_histories"]):
+    conversation_history = generator_output["conversation_histories"][i] or []
+elif "rollout_metadata" in generator_output and i < len(generator_output["rollout_metadata"]):
+    metadata = generator_output["rollout_metadata"][i]
+    if isinstance(metadata, dict) and "conversation_history" in metadata:
+        conversation_history = metadata["conversation_history"]
+
+# For backward compatibility, also provide clean decoded fields
+input_prompt = self.tokenizer.decode(generator_output["prompt_token_ids"][i], skip_special_tokens=True).strip()
+output_response = self.tokenizer.decode(generator_output["response_ids"][i], skip_special_tokens=True).strip()
+
+entry = {
+    "global_step": self.global_step,
+    "uid": uid,
+    "conversation": conversation_history,  # Clean message array format (primary)
+    "input_prompt": input_prompt,  # Legacy field for backward compatibility
+    "output_response": output_response,  # Legacy field for backward compatibility
+    # ... other fields
+}
+```
+
+---
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/config/ppo_base_config.yaml`
+
+**8. Added length filtering configuration** (Lines 195-200):
+```yaml
+# Before: Only zero_reward_on_non_stop
+zero_reward_on_non_stop: false 
+
+# After: Added length-based filtering options
+zero_reward_on_non_stop: false 
+
+# Length-based reward filtering (similar to DAPO paper)
+# Set reward to 0 if assistant response exceeds the specified token threshold
+zero_reward_on_length_threshold: false
+max_assistant_response_tokens: 2048  # Maximum tokens before reward becomes 0
+```
+
+#### Impact
+
+**Conversation Export Improvements**:
+- **Eliminated**: Special token pollution in exported conversations
+- **Clean Format**: Proper `[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}]` structure
+- **Source of Truth**: Captures conversation at source instead of reconstructing from tokens
+- **Backward Compatibility**: Maintains legacy `input_prompt` and `output_response` fields
+
+**Length-based Reward Filtering**:
+- **Prevents Reward Hacking**: Models can't exploit verbosity for higher rewards
+- **DAPO-style Filtering**: Configurable token threshold with zero reward above limit
+- **Non-intrusive**: Disabled by default, easy to enable via config
+- **Observable**: Logs filtered response counts for monitoring
+- **Flexible**: Works with both regular and batched generation
+
+**Benefits**:
+1. **Clean Training Data**: Exported examples are now properly formatted for analysis
+2. **Quality Control**: Length filtering encourages concise, focused responses  
+3. **Research Compliance**: Implements established DAPO paper methodology
+4. **Production Ready**: Robust fallback mechanisms ensure compatibility
+
 #### Testing
 This fix allows Qwen3 models to work properly with:
 - `eval_before_train=true` (no more IndexError)

@@ -83,6 +83,8 @@ def concatenate_generator_outputs(generator_outputs: List[GeneratorOutput]) -> G
     }
     if "stop_reasons" in generator_outputs[0]:
         result["stop_reasons"] = sum([output["stop_reasons"] for output in generator_outputs], [])
+    if "conversation_histories" in generator_outputs[0]:
+        result["conversation_histories"] = sum([output["conversation_histories"] for output in generator_outputs], [])
     
     # Recalculate rollout_metrics from concatenated data
     responses = result["response_ids"]

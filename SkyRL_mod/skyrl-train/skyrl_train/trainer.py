@@ -383,19 +383,25 @@ class RayPPOTrainer:
                         if i >= len(generator_output["response_ids"]):
                             break
                             
-                        # Get conversation history from rollout metadata if available
+                        # Get clean conversation history from generator output or fallback to metadata
                         conversation_history = []
-                        if "rollout_metadata" in generator_output and i < len(generator_output["rollout_metadata"]):
+                        if "conversation_histories" in generator_output and i < len(generator_output["conversation_histories"]):
+                            conversation_history = generator_output["conversation_histories"][i] or []
+                        elif "rollout_metadata" in generator_output and i < len(generator_output["rollout_metadata"]):
                             metadata = generator_output["rollout_metadata"][i]
                             if isinstance(metadata, dict) and "conversation_history" in metadata:
                                 conversation_history = metadata["conversation_history"]
                         
+                        # For backward compatibility, also provide the raw decoded fields
+                        input_prompt = self.tokenizer.decode(generator_output["prompt_token_ids"][i], skip_special_tokens=True).strip()
+                        output_response = self.tokenizer.decode(generator_output["response_ids"][i], skip_special_tokens=True).strip()
+                        
                         entry = {
                             "global_step": self.global_step,
                             "uid": uid,
-                            "input_prompt": self.tokenizer.decode(generator_output["prompt_token_ids"][i]),
-                            "output_response": self.tokenizer.decode(generator_output["response_ids"][i]),
-                            "conversation_history": conversation_history,  # Full conversation trajectory
+                            "conversation": conversation_history,  # Clean message array format (primary)
+                            "input_prompt": input_prompt,  # Legacy field for backward compatibility
+                            "output_response": output_response,  # Legacy field for backward compatibility
                             "reward": generator_output["rewards"][i],
                             "stop_reason": generator_output.get("stop_reasons", [None] * len(example_uids))[i],
                             "timestamp": str(datetime.now()),

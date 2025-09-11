@@ -224,9 +224,43 @@ def dump_per_dataset_eval_results(
 ):
     """Dump evaluation results per dataset and overall aggregated results."""
 
-    # Prepare common data
-    input_prompts = [tokenizer.decode(prompt) for prompt in concat_generator_outputs["prompt_token_ids"]]
-    output_responses = [tokenizer.decode(response) for response in concat_generator_outputs["response_ids"]]
+
+    def get_clean_conversation(
+        conversation_history: Optional[List[Dict[str, str]]], 
+        env_extras: Dict[str, Any], 
+        prompt_tokens: List[int], 
+        response_tokens: List[int]
+    ) -> List[Dict[str, str]]:
+        """Get clean conversation history from generator output or fallback to token parsing."""
+        # First priority: use conversation_history from generator output (cleanest)
+        if conversation_history and isinstance(conversation_history, list) and len(conversation_history) > 0:
+            if isinstance(conversation_history[0], dict) and "role" in conversation_history[0] and "content" in conversation_history[0]:
+                return conversation_history
+        
+        # Second priority: use conversation_history from env_extras if available
+        if env_extras and "conversation_history" in env_extras and env_extras["conversation_history"]:
+            env_conversation_history = env_extras["conversation_history"]
+            # If it's already in the right format (list of dicts with role/content), return it
+            if isinstance(env_conversation_history, list) and len(env_conversation_history) > 0:
+                if isinstance(env_conversation_history[0], dict) and "role" in env_conversation_history[0] and "content" in env_conversation_history[0]:
+                    return env_conversation_history
+        
+        # Fallback: create clean conversation from token decoding (legacy compatibility)
+        messages = []
+        
+        # Add initial user message from prompt
+        if prompt_tokens:
+            prompt_content = tokenizer.decode(prompt_tokens, skip_special_tokens=True).strip()
+            if prompt_content:
+                messages.append({"role": "user", "content": prompt_content})
+        
+        # Add assistant response
+        if response_tokens:
+            response_content = tokenizer.decode(response_tokens, skip_special_tokens=True).strip()
+            if response_content:
+                messages.append({"role": "assistant", "content": response_content})
+        
+        return messages
 
     # Group indices by data source
     data_source_indices = {}
@@ -244,17 +278,25 @@ def dump_per_dataset_eval_results(
 
         with open(filename, "w") as f:
             for i in indices:
-                # Extract full conversation history from env_extras if available
-                conversation_history = []
-                if concat_env_extras[i] and "conversation_history" in concat_env_extras[i]:
-                    conversation_history = concat_env_extras[i]["conversation_history"]
+                # Get clean conversation from generator output or fallback to parsing
+                generator_conversation = concat_generator_outputs.get("conversation_histories", [None] * len(indices))[i]
+                conversation = get_clean_conversation(
+                    generator_conversation,
+                    concat_env_extras[i],
+                    concat_generator_outputs["prompt_token_ids"][i],
+                    concat_generator_outputs["response_ids"][i]
+                )
+                
+                # For backward compatibility, also provide the raw decoded fields
+                input_prompt = tokenizer.decode(concat_generator_outputs["prompt_token_ids"][i], skip_special_tokens=True).strip()
+                output_response = tokenizer.decode(concat_generator_outputs["response_ids"][i], skip_special_tokens=True).strip()
                 
                 entry = {
-                    "input_prompt": input_prompts[i],
-                    "output_response": output_responses[i],
-                    "conversation_history": conversation_history,  # Full conversation with user/tool responses
+                    "conversation": conversation,  # Clean message array format (primary)
+                    "input_prompt": input_prompt,  # Legacy field for backward compatibility  
+                    "output_response": output_response,  # Legacy field for backward compatibility
                     "score": concat_generator_outputs["rewards"][i],
-                    "stop_reason": concat_generator_outputs.get("stop_reasons", [None] * len(input_prompts))[i],
+                    "stop_reason": concat_generator_outputs.get("stop_reasons", [None] * len(concat_generator_outputs["prompt_token_ids"]))[i],
                     "env_class": concat_all_envs[i],
                     "env_extras": concat_env_extras[i],
                     "data_source": data_source,

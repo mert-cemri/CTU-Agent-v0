@@ -20,9 +20,12 @@ DATA_DIR="data/tau_bench_retail"
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
+# Generate timestamp for unique export directories
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_8b_${TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -117,6 +120,9 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.sampling_params.max_generate_length=512 \
   generator.sampling_params.temperature=0.8 \
   generator.sampling_params.top_p=0.9 \
+  +generator.sampling_params.repetition_penalty=1.05 \
+  +generator.sampling_params.frequency_penalty=0.5 \
+  +generator.sampling_params.presence_penalty=0.1 \
   generator.override_existing_update_group="force_new" \
   generator.use_native_tool_calling=true \
   environment.env_class="tau_bench" \
