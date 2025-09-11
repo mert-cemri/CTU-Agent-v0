@@ -1262,3 +1262,56 @@ critic:
 - Provides debugging visibility into generation pipeline
 - Reduces GPU memory usage through CPU offloading
 - Maintains stability with proper error handling
+
+---
+
+## Section 26: Final 4B Taxonomy OOM Fixes
+
+### Problem
+Despite previous memory optimizations, the 4B taxonomy training script was still experiencing OOM errors during training.
+
+### Solution
+Applied additional aggressive memory optimizations specifically for 4B taxonomy training:
+
+#### A. Further Reduced Batch Sizes (`training/run_retail_4b_grpo_taxonomy.sh`)
+```bash
+# Before:
+trainer.train_batch_size=8
+trainer.policy_mini_batch_size=4
+trainer.critic_mini_batch_size=4
+trainer.eval_batch_size=4
+
+# After: (Applied aggressive memory reduction)
+trainer.train_batch_size=4          # Reduced from 8
+trainer.policy_mini_batch_size=2    # Reduced from 4
+trainer.critic_mini_batch_size=2    # Reduced from 4
+trainer.eval_batch_size=2           # Reduced from 4
+```
+
+#### B. Reduced Environment Workers and GPU Utilization
+```bash
+# Before:
+environment.skyrl_gym.max_env_workers=10
+generator.gpu_memory_utilization=0.75
+
+# After:
+environment.skyrl_gym.max_env_workers=6    # Reduced from 10
+generator.gpu_memory_utilization=0.6       # Reduced from 0.75
+```
+
+### Files Changed
+- **`training/run_retail_4b_grpo_taxonomy.sh`**: Lines 88, 89, 90, 94, 122, 146
+
+### Impact
+- **Memory Usage**: Significantly reduced GPU memory requirements for 4B model
+- **Training Stability**: Should prevent OOM errors during taxonomy feedback training
+- **Performance**: Slightly reduced throughput but maintains training effectiveness
+- **Compatibility**: Maintains full functionality with memory-constrained environments
+
+### Note
+These changes specifically target the 4B taxonomy variant which has the highest memory requirements due to:
+1. 4B model size (larger than 3B)
+2. Taxonomy feedback LLM Judge integration
+3. Multi-turn conversation handling
+
+The optimizations ensure stable training on hardware with limited GPU memory while preserving the taxonomy feedback functionality.
