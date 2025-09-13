@@ -50,6 +50,107 @@ if self.custom_chat_template and self.use_conversation_multi_turn:
 
 ---
 
+### Section 28: Proper Application-Layer LoRA Integration
+
+#### Date: 2025-01-09
+
+#### Purpose
+Implement LoRA support without modifying the core SkyRL codebase, providing a clean application-layer solution for LoRA weight synchronization between training and VLLM inference engines.
+
+#### Problem
+When LoRA is enabled, PEFT wraps models and adds "base_model." prefix to parameter names, but VLLM inference engines expect the original parameter names. The previous approach of modifying SkyRL workers was not the right solution.
+
+#### Solution: Application-Layer LoRA Integration
+
+**Core Components Created**:
+
+1. **LoRA Configuration** (`tau_bench_env/lora_config.py`)
+   - Detects LoRA settings from training config
+   - Validates LoRA parameters (rank > 0, alpha > 0, 0 ≤ dropout ≤ 1)
+   - Provides `LoRAConfig` class for easy configuration management
+
+2. **LoRA Worker Mixins** (`tau_bench_env/lora_worker_mixins.py`)
+   - `LoRAWorkerMixin`: Base mixin with parameter name mapping
+   - `LoRAFSDPWorkerMixin`: FSDP-specific LoRA weight broadcasting
+   - `LoRADeepSpeedWorkerMixin`: DeepSpeed-specific LoRA weight broadcasting
+
+3. **LoRA Workers** (`tau_bench_env/lora_workers.py`)
+   - `LoRAFSDPPolicyWorker`: Combines FSDP worker with LoRA mixin
+   - `LoRADeepSpeedPolicyWorker`: Combines DeepSpeed worker with LoRA mixin
+   - Factory function for automatic worker selection
+
+4. **LoRA Weights Manager** (`tau_bench_env/lora_weights_manager.py`)
+   - `LoRAInferenceWeightsManager`: Handles LoRA weight synchronization
+   - Factory function for conditional manager creation
+
+**Key Features**:
+
+- **Parameter Name Mapping**: Strips "base_model." prefix from LoRA parameter names
+  ```python
+  def _map_lora_parameter_name(self, param_name: str) -> str:
+      if param_name.startswith("base_model."):
+          return param_name[len("base_model."):]
+      return param_name
+  ```
+
+- **Automatic Detection**: Uses LoRA workers only when `lora_rank > 0`
+- **Drop-in Compatibility**: Standard training works unchanged
+- **No SkyRL Modifications**: Core SkyRL codebase remains untouched
+
+**Configuration**:
+```yaml
+trainer:
+  policy:
+    model:
+      path: "Qwen/Qwen2.5-3B-Instruct"
+      lora_rank: 32      # Enables LoRA
+      lora_alpha: 64     # LoRA scaling
+      lora_dropout: 0.1  # LoRA dropout
+```
+
+**Usage Example**:
+```python
+from tau_bench_env import (
+    validate_lora_config, log_lora_status,
+    create_weights_manager, create_lora_policy_worker
+)
+
+# Validate and create LoRA-compatible components
+validate_lora_config(cfg)
+log_lora_status(cfg)
+
+# Automatically choose appropriate worker and weights manager
+policy_worker_class = create_lora_policy_worker(cfg.trainer.strategy)
+weights_manager = create_weights_manager(
+    policy_model=trainer.policy_model,
+    inference_engine_client=trainer.inference_engine_client,
+    colocate_all=cfg.trainer.placement.colocate_all,
+    lora_rank=cfg.trainer.policy.model.lora_rank,
+)
+```
+
+#### Benefits
+1. **Clean Architecture**: No core SkyRL modifications required
+2. **Automatic Integration**: Detects LoRA config and switches components
+3. **Full Strategy Support**: Works with both FSDP and DeepSpeed
+4. **Robust Error Handling**: Validates configuration and provides clear errors
+5. **Easy Integration**: Drop-in replacement for existing training scripts
+
+#### Files Created
+- `tau_bench_env/lora_config.py`: Configuration utilities
+- `tau_bench_env/lora_worker_mixins.py`: Reusable LoRA broadcasting mixins  
+- `tau_bench_env/lora_workers.py`: LoRA-compatible worker classes
+- `tau_bench_env/lora_weights_manager.py`: LoRA-compatible weights manager
+- `tau_bench_env/LORA_INTEGRATION_GUIDE.md`: Detailed usage documentation
+
+#### Impact
+- **Enables**: Proper LoRA training with weight synchronization to VLLM
+- **Resolves**: "base_model" parameter name conflicts between LoRA and VLLM
+- **Maintains**: Full compatibility with existing training scripts
+- **Provides**: Clean, maintainable solution for LoRA integration
+
+---
+
 ## Date: 2025-01-11
 
 ### Section 25: Clean Conversation History Export and Length-based Reward Filtering
