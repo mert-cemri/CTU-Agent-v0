@@ -4,6 +4,7 @@ import asyncio
 import ray
 import torch
 import torch.distributed
+from loguru import logger
 from transformers import AutoModel, AutoConfig
 from torch.distributed.fsdp.api import ShardedStateDictConfig, StateDictType
 from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -121,9 +122,12 @@ class FSDPPolicyRayActorBase(PolicyWorkerBase):
         params = self.model.model.state_dict()
 
         for name, param in params.items():
-            # Handle LoRA parameter names (strip base_model. prefix added by PEFT)
+            # Handle LoRA parameter names: PEFT adds 'base_model.' prefix to original model parameters
+            # but VLLM expects the original parameter names, so we strip this prefix
+            original_name = name
             if name.startswith("base_model."):
                 name = name[len("base_model."):]
+                logger.debug(f"LoRA parameter mapping: {original_name} -> {name}")
             
             # broadcast
             if not self.use_cuda_ipc:

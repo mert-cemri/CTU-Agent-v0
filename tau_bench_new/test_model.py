@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from vllm import LLM, SamplingParams
 from tau_bench.envs import get_env
 from tau_bench.agents import ToolCallingAgent
-from tau_bench.tau_types import Task, EnvRunResult, Action
+from tau_bench.tau_types import Task, EnvRunResult, Action, RunConfig
 
 
 class ModelTester:
@@ -70,32 +70,34 @@ class ModelTester:
         """Evaluate a single task."""
         # Get environment
         env = get_env(
-            self.domain,
+            env_name=self.domain,
             user_strategy="llm",
             user_model=self.user_model,
-            user_provider="openai",
             task_split="train",
+            user_provider="openai",
             task_index=task_idx,
         )
-        
-        # Get the task
-        task = env.tasks[task_idx]
         
         # Create a simple agent wrapper for VLLM
         class VLLMAgent:
             def __init__(self, llm, sampling_params):
                 self.llm = llm
                 self.sampling_params = sampling_params
-                
+
             def generate(self, prompt: str) -> str:
                 """Generate response using VLLM."""
                 outputs = self.llm.generate([prompt], self.sampling_params)
                 return outputs[0].outputs[0].text.strip()
-        
+
         agent = VLLMAgent(self.llm, self.sampling_params)
-        
-        # Reset environment
-        obs, info = env.reset(task_index=task_idx)
+
+        # Reset environment (task_index already set in get_env)
+        reset_response = env.reset()
+        obs = reset_response.observation
+        info = reset_response.info
+
+        # Get the task from the environment info
+        task = info.task
         
         # Run conversation
         conversation = []
@@ -125,14 +127,22 @@ class ModelTester:
                         action = Action(name=action["name"], kwargs=action.get("kwargs", {}))
 
                     # Execute action in environment
-                    obs, reward, done, info = env.step(action)
+                    step_response = env.step(action)
+                    obs = step_response.observation
+                    reward = step_response.reward
+                    done = step_response.done
+                    info = step_response.info
 
                     if obs and not done:
                         conversation.append({"role": "tool", "content": obs})
                 else:
                     # No action found, try to continue
                     respond_action = Action(name="respond", kwargs={"content": response})
-                    obs, reward, done, info = env.step(respond_action)
+                    step_response = env.step(respond_action)
+                    obs = step_response.observation
+                    reward = step_response.reward
+                    done = step_response.done
+                    info = step_response.info
             except Exception as e:
                 print(f"Error in turn {turns}: {e}")
                 done = True
@@ -142,13 +152,13 @@ class ModelTester:
             turns += 1
         
         # Get final reward
-        final_reward = info.get("reward", reward) if info else reward
+        final_reward = reward
         
         return {
             "task_id": task_idx,
             "domain": self.domain,
             "instruction": task.instruction,
-            "ground_truth_actions": [action.dict() for action in task.actions],
+            "ground_truth_actions": [action.model_dump() for action in task.actions],
             "conversation": conversation,
             "reward": final_reward,
             "success": final_reward > 0,
@@ -156,9 +166,16 @@ class ModelTester:
             "timestamp": datetime.now().isoformat(),
         }
     
-    def _format_prompt(self, conversation: List[Dict], tools_info: str) -> str:
+    def _format_prompt(self, conversation: List[Dict], tools_info: List[Dict]) -> str:
         """Format conversation into a prompt."""
-        prompt = f"You are a helpful assistant. You have access to the following tools:\n\n{tools_info}\n\n"
+        # Convert tools_info list to string format
+        tools_str = ""
+        if tools_info:
+            tools_str = "Available tools:\n"
+            for tool in tools_info:
+                tools_str += f"- {tool.get('name', 'unknown')}: {tool.get('description', '')}\n"
+
+        prompt = f"You are a helpful assistant. {tools_str}\n"
         
         for msg in conversation:
             role = msg["role"]
