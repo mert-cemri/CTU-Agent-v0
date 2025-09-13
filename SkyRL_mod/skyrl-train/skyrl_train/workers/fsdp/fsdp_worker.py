@@ -66,6 +66,9 @@ class FSDPPolicyRayActorBase(PolicyWorkerBase):
                 # during training
                 bf16=False,
                 target_modules=self.cfg.trainer.target_modules,
+                lora_rank=getattr(self.cfg.trainer.policy.model, 'lora_rank', 0),
+                lora_alpha=getattr(self.cfg.trainer.policy.model, 'lora_alpha', 16),
+                lora_dropout=getattr(self.cfg.trainer.policy.model, 'lora_dropout', 0.0),
                 sequence_parallel_size=self.cfg.trainer.policy.sequence_parallel_size,
                 use_sample_packing=self.cfg.trainer.use_sample_packing,
                 use_torch_compile=self.cfg.trainer.policy.use_torch_compile,
@@ -372,6 +375,10 @@ class FSDPRefRayActorBase(RefWorkerBase):
                 model_path,
                 use_flash_attention_2=self.cfg.trainer.flash_attn,
                 bf16=self.cfg.trainer.bf16,
+                target_modules=self.cfg.trainer.target_modules,
+                lora_rank=getattr(self.cfg.trainer.policy.model, 'lora_rank', 0),
+                lora_alpha=getattr(self.cfg.trainer.policy.model, 'lora_alpha', 16),
+                lora_dropout=getattr(self.cfg.trainer.policy.model, 'lora_dropout', 0.0),
                 sequence_parallel_size=self.cfg.trainer.ref.sequence_parallel_size,
                 use_sample_packing=self.cfg.trainer.use_sample_packing,
             )

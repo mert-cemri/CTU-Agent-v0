@@ -1315,3 +1315,115 @@ These changes specifically target the 4B taxonomy variant which has the highest 
 3. Multi-turn conversation handling
 
 The optimizations ensure stable training on hardware with limited GPU memory while preserving the taxonomy feedback functionality.
+
+---
+
+## Section 27: LoRA Support Implementation
+
+### Problem
+The SkyRL framework had LoRA support implemented in the Actor class but it was never integrated with the training pipeline. Users couldn't enable LoRA fine-tuning because:
+1. No configuration schema for LoRA parameters
+2. Worker classes didn't pass LoRA parameters to Actor constructor
+3. No examples or scripts showing how to use LoRA
+
+### Solution
+Implemented complete LoRA support throughout the training pipeline following the pattern used in SkyAgent SFT trainer.
+
+#### A. Added LoRA Configuration Schema (`training/configs/tau_bench_config.yaml`)
+```yaml
+policy:
+  model:
+    path: "Qwen/Qwen2.5-3B-Instruct"
+    # LoRA configuration (0 = disabled, >0 = enabled)
+    lora_rank: 0
+    lora_alpha: 16
+    lora_dropout: 0.0
+```
+
+#### B. Updated FSDP Workers (`skyrl_train/workers/fsdp/fsdp_worker.py`)
+
+**PolicyWorker** (Lines 69-71):
+```python
+# Before: No LoRA parameters passed
+actor = Actor(
+    model_path,
+    use_flash_attention_2=self.cfg.trainer.flash_attn,
+    bf16=False,
+    target_modules=self.cfg.trainer.target_modules,
+    # ... other parameters
+)
+
+# After: LoRA parameters from config
+actor = Actor(
+    model_path,
+    use_flash_attention_2=self.cfg.trainer.flash_attn,
+    bf16=False,
+    target_modules=self.cfg.trainer.target_modules,
+    lora_rank=getattr(self.cfg.trainer.policy.model, 'lora_rank', 0),
+    lora_alpha=getattr(self.cfg.trainer.policy.model, 'lora_alpha', 16),
+    lora_dropout=getattr(self.cfg.trainer.policy.model, 'lora_dropout', 0.0),
+    # ... other parameters
+)
+```
+
+**RefWorker** (Lines 379-381): Similar changes to enable LoRA for reference model
+
+#### C. Updated DeepSpeed Workers (`skyrl_train/workers/deepspeed/deepspeed_worker.py`)
+
+**PolicyWorker** (Lines 62-64):
+```python
+actor = Actor(
+    model_id_or_path,
+    # ... existing parameters
+    lora_rank=getattr(self.cfg.trainer.policy.model, 'lora_rank', 0),
+    lora_alpha=getattr(self.cfg.trainer.policy.model, 'lora_alpha', 16),
+    lora_dropout=getattr(self.cfg.trainer.policy.model, 'lora_dropout', 0.0),
+    # ... other parameters
+)
+```
+
+**RefWorker** (Lines 373-375): Similar changes for reference model
+
+#### D. Created LoRA Training Scripts
+
+1. **4B Model Scripts**:
+   - `run_retail_4b_grpo_lora.sh`: Rank 32, Alpha 64
+   - `run_retail_4b_grpo_lora_taxonomy.sh`: With LLM Judge feedback
+
+2. **8B Model Scripts**:
+   - `run_retail_8b_grpo_lora.sh`: Rank 64, Alpha 128  
+   - `run_retail_8b_grpo_lora_taxonomy.sh`: With LLM Judge feedback
+
+**Configuration example:**
+```bash
+trainer.policy.model.lora_rank=32 \
+trainer.policy.model.lora_alpha=64 \
+trainer.policy.model.lora_dropout=0.05 \
+```
+
+### Files Changed
+- **`training/configs/tau_bench_config.yaml`**: Added LoRA config schema under policy.model
+- **`skyrl_train/workers/fsdp/fsdp_worker.py`**: Lines 69-71, 379-381 - Pass LoRA params to Actor
+- **`skyrl_train/workers/deepspeed/deepspeed_worker.py`**: Lines 62-64, 373-375 - Pass LoRA params to Actor
+- **`training/run_retail_*_lora*.sh`**: 4 new LoRA training scripts created
+
+### Impact
+- **Memory Efficiency**: ~99% reduction in trainable parameters when LoRA enabled
+- **Larger Batch Sizes**: Can use significantly larger batch sizes due to memory savings
+- **Performance**: Often matches full fine-tuning performance with much lower resource requirements
+- **Backward Compatibility**: LoRA disabled by default (lora_rank=0)
+- **Flexibility**: Easy to enable/disable and tune LoRA hyperparameters
+
+### Usage Examples
+```bash
+# Enable LoRA with rank 32
+bash training/run_retail_4b_grpo_lora.sh
+
+# Custom LoRA configuration
+python main_tau_bench.py trainer.policy.model.lora_rank=64 trainer.policy.model.lora_alpha=128
+
+# With taxonomy feedback
+TAXONOMY_ALPHA=2 bash training/run_retail_8b_grpo_lora_taxonomy.sh
+```
+
+The implementation follows the same pattern as SkyAgent's SFT trainer, ensuring consistency across the SkyRL ecosystem.
