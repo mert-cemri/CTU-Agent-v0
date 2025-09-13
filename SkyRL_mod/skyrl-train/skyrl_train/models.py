@@ -133,27 +133,25 @@ class Actor(nn.Module):
                             if hasattr(module, "weight"):
                                 module = module.to(torch.bfloat16)
                 elif bf16:
-                    # Fix FSDP mixed dtype error: ensure LoRA parameters match base model dtype
-                    target_dtype = torch.bfloat16
-                    print(f"[DEBUG] Applying LoRA dtype fix for Actor with bf16=True, target_dtype={target_dtype}")
-                    lora_modules_found = 0
-                    for name, module in self.model.named_modules():
-                        if isinstance(module, LoraLayer):
-                            print(f"[DEBUG] Converting LoRA module {name} to {target_dtype}")
-                            module = module.to(target_dtype)
-                            lora_modules_found += 1
-                        if "norm" in name:
-                            module = module.to(torch.float32)  # Keep norms in float32 for stability
-                    print(f"[DEBUG] Total LoRA modules converted: {lora_modules_found}")
-                
-                # Debug: Check all parameter dtypes after LoRA conversion
-                dtypes_found = set()
-                for name, param in self.model.named_parameters():
-                    dtypes_found.add(param.dtype)
-                    if len(dtypes_found) > 1:  # Mixed dtypes detected
-                        print(f"[DEBUG] Mixed dtype detected! Parameter '{name}' has dtype {param.dtype}")
-                        break
-                print(f"[DEBUG] All parameter dtypes in Actor: {dtypes_found}")
+                    # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
+                    print(f"[DEBUG] Applying FSDP dtype fix for Actor with bf16=True")
+                    param_count = 0
+                    converted_count = 0
+                    for name, param in self.model.named_parameters():
+                        param_count += 1
+                        if param.dtype != torch.bfloat16:
+                            print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+                            param.data = param.data.to(torch.bfloat16)
+                            converted_count += 1
+                    print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16")
+                    
+                    # Verify all parameters are now bfloat16
+                    dtypes_found = set()
+                    for name, param in self.model.named_parameters():
+                        dtypes_found.add(param.dtype)
+                        if param.dtype != torch.bfloat16:
+                            print(f"[DEBUG] ERROR: Parameter {name} still has dtype {param.dtype}")
+                    print(f"[DEBUG] Final parameter dtypes in Actor: {dtypes_found}")
 
             # MoE - balancing loss
             model_config = self.model.config.to_dict()
@@ -719,27 +717,25 @@ def get_llm_for_sequence_regression(
                     if hasattr(module, "weight"):
                         module = module.to(torch.bfloat16)
         elif bf16:
-            # Fix FSDP mixed dtype error: ensure LoRA parameters match base model dtype
-            target_dtype = torch.bfloat16
-            print(f"[DEBUG] Applying LoRA dtype fix for {model_type} model with bf16=True, target_dtype={target_dtype}")
-            lora_modules_found = 0
-            for name, module in model.named_modules():
-                if isinstance(module, LoraLayer):
-                    print(f"[DEBUG] Converting LoRA module {name} to {target_dtype}")
-                    module = module.to(target_dtype)
-                    lora_modules_found += 1
-                if "norm" in name:
-                    module = module.to(torch.float32)  # Keep norms in float32 for stability
-            print(f"[DEBUG] Total LoRA modules converted in {model_type}: {lora_modules_found}")
+            # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
+            print(f"[DEBUG] Applying FSDP dtype fix for {model_type} model with bf16=True")
+            param_count = 0
+            converted_count = 0
+            for name, param in model.named_parameters():
+                param_count += 1
+                if param.dtype != torch.bfloat16:
+                    print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+                    param.data = param.data.to(torch.bfloat16)
+                    converted_count += 1
+            print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16 in {model_type}")
             
-            # Debug: Check all parameter dtypes after LoRA conversion
+            # Verify all parameters are now bfloat16
             dtypes_found = set()
             for name, param in model.named_parameters():
                 dtypes_found.add(param.dtype)
-                if len(dtypes_found) > 1:  # Mixed dtypes detected
-                    print(f"[DEBUG] Mixed dtype detected in {model_type}! Parameter '{name}' has dtype {param.dtype}")
-                    break
-            print(f"[DEBUG] All parameter dtypes in {model_type}: {dtypes_found}")
+                if param.dtype != torch.bfloat16:
+                    print(f"[DEBUG] ERROR: Parameter {name} in {model_type} still has dtype {param.dtype}")
+            print(f"[DEBUG] Final parameter dtypes in {model_type}: {dtypes_found}")
 
     # MoE - balancing loss
     model_config = model.config.to_dict()

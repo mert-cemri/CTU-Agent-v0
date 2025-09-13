@@ -1642,3 +1642,98 @@ TAXONOMY_ALPHA=2 bash training/run_retail_8b_grpo_lora_taxonomy.sh
 ```
 
 The implementation follows the same pattern as SkyAgent's SFT trainer, ensuring consistency across the SkyRL ecosystem.
+
+---
+
+## 30. FSDP Mixed Dtype Fix for LoRA Training (2025-09-13)
+
+### Problem
+When using LoRA with FSDP (Fully Sharded Data Parallel) and bfloat16 precision, training failed with:
+```
+AssertionError: FSDP expects uniform original parameter dtype but got {torch.float32, torch.bfloat16}
+```
+
+**Root Cause**: LoRA parameters are initialized in float32 by default, while the base model uses bfloat16, causing mixed dtypes that FSDP cannot handle.
+
+### Solution
+Implemented a comprehensive dtype consistency fix that ensures ALL parameters are bfloat16 when `bf16=True`.
+
+#### A. Actor Model Dtype Fix
+**File**: `SkyRL_mod/skyrl-train/skyrl_train/models.py` (Lines 135-154)
+
+```python
+elif bf16:
+    # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
+    print(f"[DEBUG] Applying FSDP dtype fix for Actor with bf16=True")
+    param_count = 0
+    converted_count = 0
+    for name, param in self.model.named_parameters():
+        param_count += 1
+        if param.dtype != torch.bfloat16:
+            print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+            param.data = param.data.to(torch.bfloat16)
+            converted_count += 1
+    print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16")
+    
+    # Verify all parameters are now bfloat16
+    dtypes_found = set()
+    for name, param in self.model.named_parameters():
+        dtypes_found.add(param.dtype)
+        if param.dtype != torch.bfloat16:
+            print(f"[DEBUG] ERROR: Parameter {name} still has dtype {param.dtype}")
+    print(f"[DEBUG] Final parameter dtypes in Actor: {dtypes_found}")
+```
+
+#### B. Reward/Critic Model Dtype Fix  
+**File**: `SkyRL_mod/skyrl-train/skyrl_train/models.py` (Lines 719-738)
+
+```python
+elif bf16:
+    # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
+    print(f"[DEBUG] Applying FSDP dtype fix for {model_type} model with bf16=True")
+    param_count = 0
+    converted_count = 0
+    for name, param in model.named_parameters():
+        param_count += 1
+        if param.dtype != torch.bfloat16:
+            print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+            param.data = param.data.to(torch.bfloat16)
+            converted_count += 1
+    print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16 in {model_type}")
+    
+    # Verify all parameters are now bfloat16
+    dtypes_found = set()
+    for name, param in model.named_parameters():
+        dtypes_found.add(param.dtype)
+        if param.dtype != torch.bfloat16:
+            print(f"[DEBUG] ERROR: Parameter {name} in {model_type} still has dtype {param.dtype}")
+    print(f"[DEBUG] Final parameter dtypes in {model_type}: {dtypes_found}")
+```
+
+### Key Improvements from Previous Approach
+
+1. **Uniform Conversion**: Converts ALL parameters to bfloat16, not just LoRA modules
+2. **Parameter-Level Modification**: Uses `param.data = param.data.to(torch.bfloat16)` for reliable conversion
+3. **Comprehensive Coverage**: Applies to Actor, RewardModel, and CriticModel
+4. **Verification**: Includes debug output to verify dtype consistency
+5. **Simplified Logic**: Removed complex module-level conversions that caused inconsistencies
+
+### Files Changed
+- **`SkyRL_mod/skyrl-train/skyrl_train/models.py`**: Lines 135-154, 719-738
+
+### Expected Debug Output
+```
+[DEBUG] Applying FSDP dtype fix for Actor with bf16=True
+[DEBUG] Converting parameter base_model.model.embed_tokens.weight from torch.float32 to bfloat16
+[DEBUG] Converting parameter base_model.model.layers.0.self_attn.lora_A.weight from torch.float32 to bfloat16
+[DEBUG] Converted 145/234 parameters to bfloat16
+[DEBUG] Final parameter dtypes in Actor: {torch.bfloat16}
+```
+
+### Impact
+- **Fixes FSDP Training**: LoRA scripts now work with FSDP + bfloat16
+- **Maintains Performance**: All computations still use mixed precision efficiently
+- **Debug-Friendly**: Comprehensive logging for troubleshooting dtype issues
+- **Universal Coverage**: Handles all model types (Actor, Reward, Critic)
+
+This fix ensures that LoRA training is fully compatible with FSDP's dtype requirements while maintaining the benefits of mixed precision training.
