@@ -121,6 +121,10 @@ class FSDPPolicyRayActorBase(PolicyWorkerBase):
         params = self.model.model.state_dict()
 
         for name, param in params.items():
+            # Handle LoRA parameter names (strip base_model. prefix added by PEFT)
+            if name.startswith("base_model."):
+                name = name[len("base_model."):]
+            
             # broadcast
             if not self.use_cuda_ipc:
                 if torch.distributed.get_rank() == 0:

@@ -137,6 +137,10 @@ class DeepSpeedPolicyWorkerBase(PolicyWorkerBase):
         torch.cuda.empty_cache()
         model = self.model.model.module
         for name, param in model.named_parameters():
+            # Handle LoRA parameter names (strip base_model. prefix added by PEFT)
+            if name.startswith("base_model."):
+                name = name[len("base_model."):]
+            
             # broadcast
             if not self.use_cuda_ipc:
                 if torch.distributed.get_rank() == 0:
