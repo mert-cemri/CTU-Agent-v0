@@ -2,10 +2,13 @@
 
 # Simple script to run tau_bench tests with VLLM
 
-# Set default values
+# Set default values (can be overridden via command line arguments)
 DOMAIN=${1:-"retail"}
 MODEL=${2:-"Qwen/Qwen3-8B"}
 NUM_TASKS=${3:-5}
+MAX_MODEL_LEN=${4:-32768}
+TENSOR_PARALLEL=${5:-1}
+GPU_MEMORY=${6:-0.8}
 
 # Ensure OpenAI API key is set for user simulation
 if [ -z "$OPENAI_API_KEY" ]; then
@@ -20,6 +23,9 @@ echo "========================================="
 echo "Domain: $DOMAIN"
 echo "Model: $MODEL"
 echo "Number of tasks: $NUM_TASKS"
+echo "Max model length: $MAX_MODEL_LEN"
+echo "Tensor parallel size: $TENSOR_PARALLEL"
+echo "GPU memory utilization: $GPU_MEMORY"
 echo ""
 
 # Navigate to tau_bench_new directory
@@ -32,22 +38,30 @@ python test_model.py \
     --user-model "gpt-4o" \
     --num-tasks "$NUM_TASKS" \
     --temperature 0.7 \
-    --max-tokens 32000
+    --max-tokens 2048 \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --tensor-parallel-size "$TENSOR_PARALLEL" \
+    --gpu-memory-utilization "$GPU_MEMORY"
 
 echo ""
 echo "Test complete! Check the results/ directory for output."
 
-#   # Test retail domain with 5 tasks
-#   python test_model.py --domain retail --num-tasks 5
-
-#   # Test airline with different model
-#   python test_model.py --domain airline --model Qwen/Qwen3-8B --num-tasks 10
-
-#   # Test with custom parameters
+# Usage examples:
+#   # Basic usage with defaults
+#   bash run_test.sh
+#
+#   # Custom domain and model
+#   bash run_test.sh airline "Qwen/Qwen2.5-3B-Instruct" 10
+#
+#   # With custom VLLM settings
+#   bash run_test.sh retail "Qwen/Qwen3-8B" 5 16384 2 0.9
+#
+#   # Direct python usage with all parameters
 #   python test_model.py \
 #     --domain healthcare \
-#     --model Qwen/Qwen3-8B \
-#     --user-model gpt-4o \
+#     --model "Qwen/Qwen2.5-3B-Instruct" \
 #     --num-tasks 20 \
-#     --start-idx 10 \
+#     --max-model-len 16384 \
+#     --tensor-parallel-size 2 \
+#     --gpu-memory-utilization 0.9 \
 #     --temperature 0.5

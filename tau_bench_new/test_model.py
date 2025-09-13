@@ -31,6 +31,9 @@ class ModelTester:
         user_model: str = "gpt-4o",
         temperature: float = 0.7,
         max_tokens: int = 2048,
+        max_model_len: int = 32768,
+        tensor_parallel_size: int = 1,
+        gpu_memory_utilization: float = 0.8,
     ):
         """Initialize the tester."""
         self.model_name = model_name
@@ -38,14 +41,21 @@ class ModelTester:
         self.user_model = user_model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        
+        self.max_model_len = max_model_len
+        self.tensor_parallel_size = tensor_parallel_size
+        self.gpu_memory_utilization = gpu_memory_utilization
+
         print(f"Initializing VLLM with model: {model_name}")
+        print(f"  Max model length: {max_model_len}")
+        print(f"  Tensor parallel size: {tensor_parallel_size}")
+        print(f"  GPU memory utilization: {gpu_memory_utilization}")
+
         self.llm = LLM(
             model=model_name,
-            tensor_parallel_size=1,
-            gpu_memory_utilization=0.8,
+            tensor_parallel_size=tensor_parallel_size,
+            gpu_memory_utilization=gpu_memory_utilization,
             trust_remote_code=True,
-            max_model_len=8192,
+            max_model_len=max_model_len,
         )
         
         self.sampling_params = SamplingParams(
@@ -356,7 +366,25 @@ def main():
         default=2048,
         help="Maximum tokens to generate (default: 2048)",
     )
-    
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=32768,
+        help="Maximum model context length (default: 32768)",
+    )
+    parser.add_argument(
+        "--tensor-parallel-size",
+        type=int,
+        default=1,
+        help="Tensor parallel size for VLLM (default: 1)",
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=0.8,
+        help="GPU memory utilization for VLLM (default: 0.8)",
+    )
+
     args = parser.parse_args()
     
     print(f"Testing Configuration:")
@@ -374,6 +402,9 @@ def main():
         user_model=args.user_model,
         temperature=args.temperature,
         max_tokens=args.max_tokens,
+        max_model_len=args.max_model_len,
+        tensor_parallel_size=args.tensor_parallel_size,
+        gpu_memory_utilization=args.gpu_memory_utilization,
     )
     
     # Run evaluation

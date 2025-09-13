@@ -122,6 +122,7 @@ class Actor(nn.Module):
                 )
                 self.model = get_peft_model(self.model, lora_config)
 
+                # Ensure LoRA parameters have consistent dtypes with the base model
                 if load_in_4bit:
                     for name, module in self.model.named_modules():
                         if isinstance(module, LoraLayer):
@@ -131,6 +132,14 @@ class Actor(nn.Module):
                         if "lm_head" in name or "embed_tokens" in name:
                             if hasattr(module, "weight"):
                                 module = module.to(torch.bfloat16)
+                elif bf16:
+                    # Fix FSDP mixed dtype error: ensure LoRA parameters match base model dtype
+                    target_dtype = torch.bfloat16
+                    for name, module in self.model.named_modules():
+                        if isinstance(module, LoraLayer):
+                            module = module.to(target_dtype)
+                        if "norm" in name:
+                            module = module.to(torch.float32)  # Keep norms in float32 for stability
 
             # MoE - balancing loss
             model_config = self.model.config.to_dict()
@@ -685,6 +694,7 @@ def get_llm_for_sequence_regression(
         )
         model = get_peft_model(model, lora_config)
 
+        # Ensure LoRA parameters have consistent dtypes with the base model
         if load_in_4bit:
             for name, module in model.named_modules():
                 if isinstance(module, LoraLayer):
@@ -694,6 +704,14 @@ def get_llm_for_sequence_regression(
                 if value_head_prefix in name or "embed_tokens" in name:
                     if hasattr(module, "weight"):
                         module = module.to(torch.bfloat16)
+        elif bf16:
+            # Fix FSDP mixed dtype error: ensure LoRA parameters match base model dtype
+            target_dtype = torch.bfloat16
+            for name, module in model.named_modules():
+                if isinstance(module, LoraLayer):
+                    module = module.to(target_dtype)
+                if "norm" in name:
+                    module = module.to(torch.float32)  # Keep norms in float32 for stability
 
     # MoE - balancing loss
     model_config = model.config.to_dict()

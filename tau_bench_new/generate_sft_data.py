@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from tau_bench.types import RunConfig
+from tau_bench.tau_types import RunConfig
 from tau_bench.sft_types import SFTConfig
 from tau_bench.run import run_sft_generation, run_sft_generation_with_synthetic_tasks
 from litellm import provider_list

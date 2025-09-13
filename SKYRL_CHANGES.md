@@ -50,6 +50,120 @@ if self.custom_chat_template and self.use_conversation_multi_turn:
 
 ---
 
+### Section 29: Simple LoRA Parameter Name Mapping Fix
+
+#### Date: 2025-01-09
+
+#### Purpose
+Fix LoRA weight synchronization errors between training and VLLM inference engines by implementing proper parameter name mapping directly in SkyRL workers.
+
+#### Problem
+When LoRA is enabled, PEFT wraps models and adds complex parameter name prefixes, but VLLM expects the original parameter names:
+
+**LoRA Parameter Structure**:
+- `base_model.model.model.embed_tokens.weight` (PEFT LoRA parameter)
+- `base_model.model.model.layers.0.self_attn.q_proj.base_layer.weight` (base layer)
+- `base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight` (LoRA-specific)
+
+**VLLM Expected Names**:
+- `model.embed_tokens.weight`
+- `model.layers.0.self_attn.q_proj.weight`
+
+**Errors**:
+```
+ValueError: There is no module or parameter named 'base_model' in Qwen3ForCausalLM
+KeyError: 'model.embed_tokens.weight'
+```
+
+#### Solution: Direct Parameter Name Mapping
+
+**Files Modified**:
+
+1. **`SkyRL_mod/skyrl-train/skyrl_train/workers/deepspeed/deepspeed_worker.py`**
+2. **`SkyRL_mod/skyrl-train/skyrl_train/workers/fsdp/fsdp_worker.py`**
+
+**Implementation** (in `broadcast_to_inference_engines` methods):
+
+```python
+for name, param in model.named_parameters():  # or params.items() for FSDP
+    # Handle LoRA parameter names: PEFT adds 'base_model.model.' prefix and uses 'base_layer' 
+    # for original parameters, but VLLM expects the original parameter names
+    original_name = name
+    if name.startswith("base_model.model."):
+        # Strip the PEFT prefix
+        name = name[len("base_model.model."):]
+        # Handle LoRA base layer parameters: replace '.base_layer.' with '.'
+        name = name.replace(".base_layer.", ".")
+        logger.debug(f"LoRA parameter mapping: {original_name} -> {name}")
+    elif name.startswith("base_model."):
+        # Fallback for other base_model parameters
+        name = name[len("base_model."):]
+        logger.debug(f"LoRA parameter mapping (fallback): {original_name} -> {name}")
+    
+    # Skip LoRA-specific parameters that VLLM doesn't need
+    if ".lora_A." in name or ".lora_B." in name:
+        logger.debug(f"Skipping LoRA-specific parameter: {original_name}")
+        continue
+    
+    # ... continue with weight broadcasting using mapped 'name'
+```
+
+**Parameter Mapping Examples**:
+- `base_model.model.model.embed_tokens.weight` → `model.embed_tokens.weight` ✅
+- `base_model.model.model.layers.0.self_attn.q_proj.base_layer.weight` → `model.layers.0.self_attn.q_proj.weight` ✅  
+- `base_model.model.model.layers.0.self_attn.q_proj.lora_A.default.weight` → **SKIPPED** ✅
+
+#### Key Features
+
+1. **Correct Prefix Stripping**: Removes `base_model.model.` (not just `base_model.`)
+2. **Base Layer Handling**: Converts `.base_layer.` to `.` for LoRA-wrapped parameters
+3. **LoRA Parameter Filtering**: Skips LoRA-specific `.lora_A.` and `.lora_B.` parameters
+4. **Debug Logging**: Shows exact parameter name mappings for troubleshooting
+5. **Fallback Support**: Handles edge cases with different prefix patterns
+
+#### Benefits
+
+1. **Minimal Code Change**: Just 10 lines added to each worker's broadcast method
+2. **Follows SkyRL Patterns**: Uses the same prefix-stripping approach already used for other prefixes
+3. **No Architecture Changes**: Works with existing SkyRL infrastructure unchanged  
+4. **Comprehensive Handling**: Covers all LoRA parameter naming scenarios
+5. **Debug Visibility**: Clear logging of all parameter mappings
+
+#### Impact
+- **Enables**: Proper LoRA training with weight synchronization to VLLM
+- **Resolves**: Parameter name conflicts between LoRA/PEFT and VLLM  
+- **Fixes**: `KeyError: 'model.embed_tokens.weight'` and similar VLLM loading errors
+- **Maintains**: Full compatibility with non-LoRA training (no changes when LoRA disabled)
+
+#### Additional Fix: FSDP Mixed Dtype Error
+
+**Problem**: After fixing parameter name mapping, LoRA training failed with:
+```
+AssertionError: FSDP expects uniform original parameter dtype but got {torch.float32, torch.bfloat16}
+```
+
+**Root Cause**: LoRA parameters are initialized in float32 by default, but base model uses bfloat16, causing FSDP mixed dtype error.
+
+**Solution**: Added dtype consistency enforcement in `Actor` and `get_llm_for_sequence_regression` functions:
+
+```python
+elif bf16:
+    # Fix FSDP mixed dtype error: ensure LoRA parameters match base model dtype
+    target_dtype = torch.bfloat16
+    for name, module in model.named_modules():
+        if isinstance(module, LoraLayer):
+            module = module.to(target_dtype)
+        if "norm" in name:
+            module = module.to(torch.float32)  # Keep norms in float32 for stability
+```
+
+**Files Modified**:
+- `SkyRL_mod/skyrl-train/skyrl_train/models.py` (Actor class and get_llm_for_sequence_regression function)
+
+**Result**: LoRA parameters now have consistent dtypes with base model, allowing FSDP to work properly.
+
+---
+
 ### Section 28: Proper Application-Layer LoRA Integration
 
 #### Date: 2025-01-09
