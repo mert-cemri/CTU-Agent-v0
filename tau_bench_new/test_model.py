@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from vllm import LLM, SamplingParams
 from tau_bench.envs import get_env
 from tau_bench.agents import ToolCallingAgent
-from tau_bench.types import Task, EnvRunResult
+from tau_bench.tau_types import Task, EnvRunResult
 
 
 class ModelTester:
