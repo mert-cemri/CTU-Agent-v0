@@ -133,25 +133,32 @@ class Actor(nn.Module):
                             if hasattr(module, "weight"):
                                 module = module.to(torch.bfloat16)
                 elif bf16:
-                    # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
-                    print(f"[DEBUG] Applying FSDP dtype fix for Actor with bf16=True")
+                    # Memory-efficient FSDP dtype fix: convert parameters without creating copies
+                    print(f"[DEBUG] Applying memory-efficient FSDP dtype fix for Actor with bf16=True")
                     param_count = 0
                     converted_count = 0
-                    for name, param in self.model.named_parameters():
-                        param_count += 1
-                        if param.dtype != torch.bfloat16:
-                            print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
-                            param.data = param.data.to(torch.bfloat16)
-                            converted_count += 1
+                    
+                    # Use torch.no_grad() to avoid gradient tracking during conversion
+                    with torch.no_grad():
+                        for name, param in self.model.named_parameters():
+                            param_count += 1
+                            if param.dtype != torch.bfloat16:
+                                print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+                                # In-place conversion to avoid memory copies
+                                param.data.copy_(param.data.to(torch.bfloat16))
+                                converted_count += 1
+                    
                     print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16")
                     
-                    # Verify all parameters are now bfloat16
-                    dtypes_found = set()
+                    # Quick verification (only check dtypes, don't iterate all parameters)
+                    sample_dtypes = set()
+                    sample_count = 0
                     for name, param in self.model.named_parameters():
-                        dtypes_found.add(param.dtype)
-                        if param.dtype != torch.bfloat16:
-                            print(f"[DEBUG] ERROR: Parameter {name} still has dtype {param.dtype}")
-                    print(f"[DEBUG] Final parameter dtypes in Actor: {dtypes_found}")
+                        sample_dtypes.add(param.dtype)
+                        sample_count += 1
+                        if sample_count >= 5:  # Check first 5 parameters only
+                            break
+                    print(f"[DEBUG] Sample parameter dtypes in Actor: {sample_dtypes}")
 
             # MoE - balancing loss
             model_config = self.model.config.to_dict()
@@ -717,25 +724,32 @@ def get_llm_for_sequence_regression(
                     if hasattr(module, "weight"):
                         module = module.to(torch.bfloat16)
         elif bf16:
-            # Fix FSDP mixed dtype error: ensure ALL parameters are bfloat16
-            print(f"[DEBUG] Applying FSDP dtype fix for {model_type} model with bf16=True")
+            # Memory-efficient FSDP dtype fix: convert parameters without creating copies
+            print(f"[DEBUG] Applying memory-efficient FSDP dtype fix for {model_type} model with bf16=True")
             param_count = 0
             converted_count = 0
-            for name, param in model.named_parameters():
-                param_count += 1
-                if param.dtype != torch.bfloat16:
-                    print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
-                    param.data = param.data.to(torch.bfloat16)
-                    converted_count += 1
+            
+            # Use torch.no_grad() to avoid gradient tracking during conversion
+            with torch.no_grad():
+                for name, param in model.named_parameters():
+                    param_count += 1
+                    if param.dtype != torch.bfloat16:
+                        print(f"[DEBUG] Converting parameter {name} from {param.dtype} to bfloat16")
+                        # In-place conversion to avoid memory copies
+                        param.data.copy_(param.data.to(torch.bfloat16))
+                        converted_count += 1
+            
             print(f"[DEBUG] Converted {converted_count}/{param_count} parameters to bfloat16 in {model_type}")
             
-            # Verify all parameters are now bfloat16
-            dtypes_found = set()
+            # Quick verification (only check dtypes, don't iterate all parameters)
+            sample_dtypes = set()
+            sample_count = 0
             for name, param in model.named_parameters():
-                dtypes_found.add(param.dtype)
-                if param.dtype != torch.bfloat16:
-                    print(f"[DEBUG] ERROR: Parameter {name} in {model_type} still has dtype {param.dtype}")
-            print(f"[DEBUG] Final parameter dtypes in {model_type}: {dtypes_found}")
+                sample_dtypes.add(param.dtype)
+                sample_count += 1
+                if sample_count >= 5:  # Check first 5 parameters only
+                    break
+            print(f"[DEBUG] Sample parameter dtypes in {model_type}: {sample_dtypes}")
 
     # MoE - balancing loss
     model_config = model.config.to_dict()

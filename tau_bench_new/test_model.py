@@ -34,6 +34,7 @@ class ModelTester:
         max_model_len: int = 32768,
         tensor_parallel_size: int = 1,
         gpu_memory_utilization: float = 0.8,
+        enable_thinking: bool = True,
     ):
         """Initialize the tester."""
         self.model_name = model_name
@@ -44,11 +45,13 @@ class ModelTester:
         self.max_model_len = max_model_len
         self.tensor_parallel_size = tensor_parallel_size
         self.gpu_memory_utilization = gpu_memory_utilization
+        self.enable_thinking = enable_thinking
 
         print(f"Initializing VLLM with model: {model_name}")
         print(f"  Max model length: {max_model_len}")
         print(f"  Tensor parallel size: {tensor_parallel_size}")
         print(f"  GPU memory utilization: {gpu_memory_utilization}")
+        print(f"  Thinking mode: {'enabled' if enable_thinking else 'disabled'}")
 
         self.llm = LLM(
             model=model_name,
@@ -58,10 +61,17 @@ class ModelTester:
             max_model_len=max_model_len,
         )
         
+        # Configure stop tokens based on thinking mode setting
+        stop_tokens = ["</s>", "<|im_end|>", "<|endoftext|>"]
+
+        # Add thinking stop tokens for Qwen models if thinking is disabled
+        if "qwen" in model_name.lower() and not enable_thinking:
+            stop_tokens.extend(["<|thinking|>", "</thinking>"])
+
         self.sampling_params = SamplingParams(
             temperature=temperature,
             max_tokens=max_tokens,
-            stop=["</s>", "<|im_end|>", "<|endoftext|>"],
+            stop=stop_tokens,
         )
     
     def load_tasks(self) -> List[Task]:
@@ -109,57 +119,81 @@ class ModelTester:
         # Get the task from the environment info
         task = info.task
         
-        # Run conversation
-        conversation = []
+        # Initialize conversation with system message and user observation
+        conversation = [
+            {"role": "system", "content": env.wiki if hasattr(env, 'wiki') and env.wiki else "You are a helpful assistant."},
+            {"role": "user", "content": obs}
+        ]
+
         done = False
         turns = 0
         max_turns = 10
         
-        # Initial observation
-        conversation.append({"role": "user", "content": obs})
-        
         while not done and turns < max_turns:
             # Format prompt for the model
             prompt = self._format_prompt(conversation, env.tools_info)
-            
+
             # Generate response
             response = agent.generate(prompt)
-            conversation.append({"role": "assistant", "content": response})
-            
+
             # Parse and execute action
             try:
-                # Simple action parsing - look for tool calls
-                action = self._parse_action(response)
-                
-                if action:
-                    # Convert dict to Action object if needed
-                    if isinstance(action, dict):
-                        action = Action(name=action["name"], kwargs=action.get("kwargs", {}))
+                action = self._parse_action_from_response(response, env.tools_info)
 
-                    # Execute action in environment
-                    step_response = env.step(action)
-                    obs = step_response.observation
-                    reward = step_response.reward
-                    done = step_response.done
-                    info = step_response.info
-
-                    if obs and not done:
-                        conversation.append({"role": "tool", "content": obs})
+                # Add assistant message to conversation
+                if action.name != "respond":
+                    # This is a tool call - format as tool calling message
+                    assistant_msg = {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": f"call_{turns}",
+                            "function": {
+                                "name": action.name,
+                                "arguments": json.dumps(action.kwargs)
+                            },
+                            "type": "function"
+                        }]
+                    }
                 else:
-                    # No action found, try to continue
-                    respond_action = Action(name="respond", kwargs={"content": response})
-                    step_response = env.step(respond_action)
-                    obs = step_response.observation
-                    reward = step_response.reward
-                    done = step_response.done
-                    info = step_response.info
+                    # This is a regular response
+                    assistant_msg = {"role": "assistant", "content": response}
+
+                conversation.append(assistant_msg)
+
+                # Execute action in environment
+                step_response = env.step(action)
+                obs = step_response.observation
+                reward = step_response.reward
+                done = step_response.done
+                info = step_response.info
+
+                # Add appropriate response to conversation
+                if action.name != "respond":
+                    # Add tool response
+                    if obs:
+                        conversation.append({
+                            "role": "tool",
+                            "tool_call_id": f"call_{turns}",
+                            "name": action.name,
+                            "content": obs
+                        })
+                else:
+                    # Add user response for regular chat
+                    if obs and not done:
+                        conversation.append({"role": "user", "content": obs})
+
             except Exception as e:
                 print(f"Error in turn {turns}: {e}")
                 done = True
                 reward = 0
-                info = {"error": str(e)}
-            
+                info = step_response.info if 'step_response' in locals() else None
+
             turns += 1
+
+            # Break if environment indicates completion
+            if done:
+                break
         
         # Get final reward
         final_reward = reward
@@ -177,75 +211,117 @@ class ModelTester:
         }
     
     def _format_prompt(self, conversation: List[Dict], tools_info: List[Dict]) -> str:
-        """Format conversation into a prompt."""
-        # Convert tools_info list to string format
-        tools_str = ""
-        if tools_info:
-            tools_str = "Available tools:\n"
-            for tool in tools_info:
-                tools_str += f"- {tool.get('name', 'unknown')}: {tool.get('description', '')}\n"
+        """Format conversation into a prompt with proper tool instructions."""
+        prompt = ""
 
-        prompt = f"You are a helpful assistant. {tools_str}\n"
-        
+        # Add tools information if available
+        if tools_info:
+            prompt += "You have access to the following tools. Use them when appropriate:\n\n"
+            for tool in tools_info:
+                name = tool.get('name', 'unknown')
+                desc = tool.get('description', '')
+                params = tool.get('parameters', {})
+
+                prompt += f"Tool: {name}\n"
+                prompt += f"Description: {desc}\n"
+                if params and 'properties' in params:
+                    prompt += "Parameters:\n"
+                    for param_name, param_info in params['properties'].items():
+                        param_desc = param_info.get('description', '')
+                        param_type = param_info.get('type', 'string')
+                        prompt += f"  - {param_name} ({param_type}): {param_desc}\n"
+                prompt += f"\nTo use this tool, call: {name}(param1=\"value1\", param2=\"value2\")\n\n"
+
+            prompt += "When you want to use a tool, write the function call clearly. When you want to respond normally, just write your response.\n\n"
+
+        # Add conversation history
         for msg in conversation:
             role = msg["role"]
-            content = msg["content"]
-            
-            if role == "user":
-                prompt += f"User: {content}\n"
+            content = msg.get("content", "")
+
+            if role == "system":
+                prompt += f"System: {content}\n\n"
+            elif role == "user":
+                prompt += f"User: {content}\n\n"
             elif role == "assistant":
-                prompt += f"Assistant: {content}\n"
+                if msg.get("tool_calls"):
+                    # Format tool call
+                    for tool_call in msg["tool_calls"]:
+                        func_name = tool_call["function"]["name"]
+                        func_args = tool_call["function"]["arguments"]
+                        prompt += f"Assistant: {func_name}({func_args})\n\n"
+                else:
+                    prompt += f"Assistant: {content}\n\n"
             elif role == "tool":
-                prompt += f"Tool Output: {content}\n"
-        
+                tool_name = msg.get("name", "tool")
+                prompt += f"Tool ({tool_name}): {content}\n\n"
+
         prompt += "Assistant: "
         return prompt
     
-    def _parse_action(self, response: str) -> Optional[Dict[str, Any]]:
-        """Parse action from model response."""
-        # Simple parsing - look for JSON-like structure
-        # This should be improved based on your model's output format
-        
+    def _parse_action_from_response(self, response: str, tools_info: List[Dict]) -> Action:
+        """Parse action from model response with better tool detection."""
         import re
-        
-        # Look for tool calls in various formats
+
+        # Get available tool names
+        available_tools = [tool["name"] for tool in tools_info] if tools_info else []
+
+        # Look for various tool call patterns
         patterns = [
-            r'```json\s*({.*?})\s*```',  # JSON code block
-            r'<tool>(.*?)</tool>',        # XML tags
-            r'Action:\s*({.*?})',          # Action prefix
+            # JSON format: {"name": "tool_name", "arguments": {...}}
+            r'```json\s*\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"arguments"\s*:\s*(\{.*?\})\s*\}\s*```',
+            # Function call format: tool_name({"arg": "value"})
+            r'(\w+)\(\s*(\{[^}]*\})\s*\)',
+            # Function call with direct args: tool_name(arg1="value1", arg2="value2")
+            r'(\w+)\(([^)]+)\)',
+            # Tool tags: <tool name="tool_name">{"arg": "value"}</tool>
+            r'<tool\s+name="([^"]+)"\s*>([^<]*)</tool>',
         ]
-        
+
         for pattern in patterns:
-            match = re.search(pattern, response, re.DOTALL)
-            if match:
-                try:
-                    action_str = match.group(1)
-                    action = json.loads(action_str)
-                    return action
-                except:
-                    continue
-        
-        # Try to extract function calls
-        func_pattern = r'(\w+)\((.*?)\)'
-        match = re.search(func_pattern, response)
-        if match:
-            func_name = match.group(1)
-            args_str = match.group(2)
-            
-            # Simple argument parsing
-            kwargs = {}
-            if args_str:
-                # Split by comma and parse key=value pairs
-                for arg in args_str.split(','):
-                    if '=' in arg:
-                        key, value = arg.split('=', 1)
-                        key = key.strip().strip('"').strip("'")
-                        value = value.strip().strip('"').strip("'")
-                        kwargs[key] = value
-            
-            return {"name": func_name, "kwargs": kwargs}
-        
-        return None
+            matches = re.findall(pattern, response, re.DOTALL | re.IGNORECASE)
+            for match in matches:
+                if len(match) == 2:
+                    tool_name, args_str = match
+
+                    # Check if this is an available tool
+                    if tool_name in available_tools:
+                        try:
+                            # Try to parse arguments as JSON
+                            if args_str.strip().startswith('{'):
+                                kwargs = json.loads(args_str)
+                            else:
+                                # Parse key=value pairs
+                                kwargs = {}
+                                for arg in args_str.split(','):
+                                    if '=' in arg:
+                                        key, value = arg.split('=', 1)
+                                        key = key.strip().strip('"').strip("'")
+                                        value = value.strip().strip('"').strip("'")
+                                        kwargs[key] = value
+
+                            return Action(name=tool_name, kwargs=kwargs)
+                        except:
+                            continue
+
+        # Check if response mentions any available tools
+        for tool in available_tools:
+            if tool.lower() in response.lower():
+                # Found tool mention, try to extract arguments
+                tool_pattern = rf'{re.escape(tool)}\s*\(([^)]*)\)'
+                match = re.search(tool_pattern, response, re.IGNORECASE)
+                if match:
+                    args_str = match.group(1)
+                    kwargs = {}
+                    if args_str:
+                        for arg in args_str.split(','):
+                            if '=' in arg:
+                                key, value = arg.split('=', 1)
+                                kwargs[key.strip().strip('"').strip("'")] = value.strip().strip('"').strip("'")
+                    return Action(name=tool, kwargs=kwargs)
+
+        # Default to respond action
+        return Action(name="respond", kwargs={"content": response})
     
     def run_evaluation(
         self,
@@ -384,8 +460,23 @@ def main():
         default=0.8,
         help="GPU memory utilization for VLLM (default: 0.8)",
     )
+    parser.add_argument(
+        "--enable-thinking",
+        action="store_true",
+        default=True,
+        help="Enable thinking mode for Qwen models (default: True)",
+    )
+    parser.add_argument(
+        "--disable-thinking",
+        action="store_true",
+        help="Disable thinking mode for Qwen models",
+    )
 
     args = parser.parse_args()
+
+    # Handle thinking mode logic
+    if args.disable_thinking:
+        args.enable_thinking = False
     
     print(f"Testing Configuration:")
     print(f"  Domain: {args.domain}")
@@ -405,6 +496,7 @@ def main():
         max_model_len=args.max_model_len,
         tensor_parallel_size=args.tensor_parallel_size,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        enable_thinking=args.enable_thinking,
     )
     
     # Run evaluation
