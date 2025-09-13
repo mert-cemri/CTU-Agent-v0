@@ -18,7 +18,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from vllm import LLM, SamplingParams
 from tau_bench.envs import get_env
 from tau_bench.agents import ToolCallingAgent
-from tau_bench.tau_types import Task, EnvRunResult
+from tau_bench.tau_types import Task, EnvRunResult, Action
 
 
 class ModelTester:
@@ -120,14 +120,19 @@ class ModelTester:
                 action = self._parse_action(response)
                 
                 if action:
+                    # Convert dict to Action object if needed
+                    if isinstance(action, dict):
+                        action = Action(name=action["name"], kwargs=action.get("kwargs", {}))
+
                     # Execute action in environment
                     obs, reward, done, info = env.step(action)
-                    
+
                     if obs and not done:
                         conversation.append({"role": "tool", "content": obs})
                 else:
                     # No action found, try to continue
-                    obs, reward, done, info = env.step({"name": "respond", "kwargs": {"content": response}})
+                    respond_action = Action(name="respond", kwargs={"content": response})
+                    obs, reward, done, info = env.step(respond_action)
             except Exception as e:
                 print(f"Error in turn {turns}: {e}")
                 done = True
