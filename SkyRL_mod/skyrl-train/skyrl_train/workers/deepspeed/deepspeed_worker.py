@@ -137,12 +137,24 @@ class DeepSpeedPolicyWorkerBase(PolicyWorkerBase):
         torch.cuda.empty_cache()
         model = self.model.model.module
         for name, param in model.named_parameters():
-            # Handle LoRA parameter names: PEFT adds 'base_model.' prefix to original model parameters
-            # but VLLM expects the original parameter names, so we strip this prefix
+            # Handle LoRA parameter names: PEFT adds 'base_model.model.' prefix and uses 'base_layer' 
+            # for original parameters, but VLLM expects the original parameter names
             original_name = name
-            if name.startswith("base_model."):
-                name = name[len("base_model."):]
+            if name.startswith("base_model.model."):
+                # Strip the PEFT prefix
+                name = name[len("base_model.model."):]
+                # Handle LoRA base layer parameters: replace '.base_layer.' with '.'
+                name = name.replace(".base_layer.", ".")
                 logger.debug(f"LoRA parameter mapping: {original_name} -> {name}")
+            elif name.startswith("base_model."):
+                # Fallback for other base_model parameters
+                name = name[len("base_model."):]
+                logger.debug(f"LoRA parameter mapping (fallback): {original_name} -> {name}")
+            
+            # Skip LoRA-specific parameters that VLLM doesn't need
+            if ".lora_A." in name or ".lora_B." in name:
+                logger.debug(f"Skipping LoRA-specific parameter: {original_name}")
+                continue
             
             # broadcast
             if not self.use_cuda_ipc:
