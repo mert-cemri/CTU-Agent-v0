@@ -5,7 +5,7 @@ from litellm import completion
 
 from tau_bench.agents.base import Agent
 from tau_bench.envs.base import Env
-from tau_bench.types import (
+from tau_bench.tau_types import (
     Action,
     SolveResult,
     RESPOND_ACTION_NAME,

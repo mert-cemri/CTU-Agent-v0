@@ -7,7 +7,7 @@ from typing import List, Optional, Dict, Any
 
 from tau_bench.agents.base import Agent
 from tau_bench.envs.base import Env
-from tau_bench.types import SolveResult, Action, RESPOND_ACTION_NAME
+from tau_bench.tau_types import SolveResult, Action, RESPOND_ACTION_NAME
 
 
 class FewShotToolCallingAgent(Agent):

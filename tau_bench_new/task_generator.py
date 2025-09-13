@@ -5,7 +5,7 @@ import random
 import uuid
 from typing import List, Dict, Any, Optional, Set
 from dataclasses import dataclass
-from tau_bench.types import Task, Action
+from tau_bench.tau_types import Task, Action
 
 
 @dataclass

@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from tau_bench.envs import get_env
 from tau_bench.agents.base import Agent
-from tau_bench.types import EnvRunResult, RunConfig, Task
+from tau_bench.tau_types import EnvRunResult, RunConfig, Task
 from litellm import provider_list
 from tau_bench.envs.user import UserStrategy
 from tau_bench.sft_collector import SFTDataCollector

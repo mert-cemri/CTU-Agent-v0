@@ -4,7 +4,7 @@ Generated at: 2025-08-04T01:21:08.772748
 Total tasks: 520+580=1100
 """
 
-from tau_bench.types import Task, Action
+from tau_bench.tau_types import Task, Action
 
 TASKS_TRAIN = [
     Task(
