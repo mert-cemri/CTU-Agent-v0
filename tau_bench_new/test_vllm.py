@@ -17,7 +17,7 @@ from dataclasses import dataclass, asdict
 sys.path.append(str(Path(__file__).parent.parent))
 
 from vllm import LLM, SamplingParams
-from tau_bench_new.types import Task, Action
+from tau_bench_new.tau_types import Task, Action
 from tau_bench_new.envs.base import Env
 
 
