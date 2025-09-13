@@ -32,7 +32,7 @@ python test_model.py \
     --user-model "gpt-4o" \
     --num-tasks "$NUM_TASKS" \
     --temperature 0.7 \
-    --max-tokens 2048
+    --max-tokens 32000
 
 echo ""
 echo "Test complete! Check the results/ directory for output."
