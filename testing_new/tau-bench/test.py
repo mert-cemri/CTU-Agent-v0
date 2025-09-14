@@ -117,13 +117,14 @@ class TauBenchTester:
                 "task_id": task_id,
                 "reward": result.reward,
                 "info": {
-                    "task": env.tasks[task_id] if task_id < len(env.tasks) else {},
+                    "task": env.tasks[task_id].model_dump() if task_id < len(env.tasks) else {},
                     "source": "user",
                     "user_cost": getattr(result, 'cost', 0.0),
                     "reward_info": {
                         "reward": result.reward,
                         "info": getattr(result, 'info', {}),
-                        "actions": getattr(result, 'actions', [])
+                        "actions": [action.model_dump() if hasattr(action, 'model_dump') else action 
+                                  for action in getattr(result, 'actions', [])]
                     }
                 },
                 "traj": result.messages,  # Full conversation trajectory

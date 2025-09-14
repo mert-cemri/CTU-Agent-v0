@@ -191,6 +191,19 @@ class ModelTester:
                 print(f"Action value: {action if 'action' in locals() else 'action not defined'}")
                 import traceback
                 traceback.print_exc()
+
+                # Try to create a fallback action if parsing failed
+                if 'action' not in locals():
+                    try:
+                        action = Action(name="respond", kwargs={"content": response})
+                        print(f"Created fallback action: {action}")
+                    except:
+                        print("Failed to create fallback action, ending conversation")
+                        done = True
+                        reward = 0
+                        info = None
+                        break
+
                 done = True
                 reward = 0
                 info = step_response.info if 'step_response' in locals() else None
@@ -224,9 +237,10 @@ class ModelTester:
         if tools_info:
             prompt += "You have access to the following tools. Use them when appropriate:\n\n"
             for tool in tools_info:
-                name = tool.get('name', 'unknown')
-                desc = tool.get('description', '')
-                params = tool.get('parameters', {})
+                # Handle different tool info structures
+                name = tool.get('name') or tool.get('function', {}).get('name') or 'unknown'
+                desc = tool.get('description') or tool.get('function', {}).get('description', '')
+                params = tool.get('parameters') or tool.get('function', {}).get('parameters', {})
 
                 prompt += f"Tool: {name}\n"
                 prompt += f"Description: {desc}\n"
@@ -269,8 +283,24 @@ class ModelTester:
         """Parse action from model response with better tool detection."""
         import re
 
-        # Get available tool names
-        available_tools = [tool["name"] for tool in tools_info] if tools_info else []
+        # Get available tool names - first check the structure
+        print(f"Tools info structure: {tools_info}")
+        if tools_info and len(tools_info) > 0:
+            print(f"First tool structure: {tools_info[0]}")
+            print(f"First tool keys: {list(tools_info[0].keys()) if isinstance(tools_info[0], dict) else 'not a dict'}")
+
+        # Handle different possible structures
+        available_tools = []
+        if tools_info:
+            for tool in tools_info:
+                if isinstance(tool, dict):
+                    # Try different possible key names
+                    name = tool.get("name") or tool.get("function", {}).get("name") or tool.get("tool_name")
+                    if name:
+                        available_tools.append(name)
+                else:
+                    print(f"Unexpected tool type: {type(tool)}")
+
         print(f"Available tools: {available_tools}")
         print(f"Response to parse: {response[:200]}...")
 
