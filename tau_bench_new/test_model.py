@@ -139,6 +139,8 @@ class ModelTester:
             # Parse and execute action
             try:
                 action = self._parse_action_from_response(response, env.tools_info)
+                print(f"Turn {turns}: Parsed action = {action}")
+                print(f"Turn {turns}: Model response = {response[:200]}...")
 
                 # Add assistant message to conversation
                 if action.name != "respond":
@@ -185,6 +187,10 @@ class ModelTester:
 
             except Exception as e:
                 print(f"Error in turn {turns}: {e}")
+                print(f"Action type: {type(action) if 'action' in locals() else 'action not defined'}")
+                print(f"Action value: {action if 'action' in locals() else 'action not defined'}")
+                import traceback
+                traceback.print_exc()
                 done = True
                 reward = 0
                 info = step_response.info if 'step_response' in locals() else None
@@ -265,6 +271,8 @@ class ModelTester:
 
         # Get available tool names
         available_tools = [tool["name"] for tool in tools_info] if tools_info else []
+        print(f"Available tools: {available_tools}")
+        print(f"Response to parse: {response[:200]}...")
 
         # Look for various tool call patterns
         patterns = [
@@ -300,7 +308,9 @@ class ModelTester:
                                         value = value.strip().strip('"').strip("'")
                                         kwargs[key] = value
 
-                            return Action(name=tool_name, kwargs=kwargs)
+                            tool_action = Action(name=tool_name, kwargs=kwargs)
+                            print(f"Found tool call: {tool_action}")
+                            return tool_action
                         except:
                             continue
 
@@ -318,10 +328,21 @@ class ModelTester:
                             if '=' in arg:
                                 key, value = arg.split('=', 1)
                                 kwargs[key.strip().strip('"').strip("'")] = value.strip().strip('"').strip("'")
-                    return Action(name=tool, kwargs=kwargs)
+                    tool_action = Action(name=tool, kwargs=kwargs)
+                    print(f"Found tool mention: {tool_action}")
+                    return tool_action
 
         # Default to respond action
-        return Action(name="respond", kwargs={"content": response})
+        try:
+            default_action = Action(name="respond", kwargs={"content": response})
+            print(f"Successfully created Action: {default_action}")
+            print(f"Action type: {type(default_action)}")
+            print(f"Action name: {default_action.name}")
+            return default_action
+        except Exception as e:
+            print(f"Error creating Action: {e}")
+            # Return a simple dictionary as fallback
+            return {"name": "respond", "kwargs": {"content": response}}
     
     def run_evaluation(
         self,

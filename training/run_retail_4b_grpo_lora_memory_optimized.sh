@@ -1,15 +1,11 @@
 #!/bin/bash
 
 # Memory-Optimized GRPO Training with LoRA on Retail Domain - 4B Model
-# This script reduces memory usage through aggressive optimizations
-
-# Memory optimization environment variables
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-export TORCH_CUDA_MEMORY_FRACTION=0.9
+# Based on working run_retail_4b_grpo_lora.sh with aggressive memory optimizations
 
 # Configuration for 4B model with LoRA (memory optimized)
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=1  # Reduced from 2 to save memory
+NUM_INFERENCE_ENGINES=1  # Reduced from 2 to save memory  
 TENSOR_PARALLEL_SIZE=2   # Reduced from 4 to 2
 EPOCHS=100
 
@@ -23,32 +19,67 @@ LORA_RANK=16     # Reduced from 32 to 16
 LORA_ALPHA=32    # Reduced from 64 to 32
 LORA_DROPOUT=0.05
 
-# Memory-optimized Directory Setup
-TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
-CKPT_DIR="training/outputs/$TIMESTAMP/checkpoints"
-EXPORT_DIR="training/exports/$TIMESTAMP"
-WANDB_PROJECT="tau_bench_retail_grpo_lora_memory_opt"
-WANDB_RUN_NAME="${MODEL_NAME_SANITIZED}_$(date +%m%d_%H%M)"
+# Data Configuration - Using retail domain only
+DATA_DIR="data/tau_bench_retail"
 
-# Create directories
-mkdir -p "$CKPT_DIR"
-mkdir -p "$EXPORT_DIR"
+# Get the CTU-Agent-v0 root directory
+CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
-echo "=========================================="
-echo "Memory-Optimized LoRA GRPO Training - Retail Domain"
+# Generate timestamp for unique export directories
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+
+# Make sure required directories exist
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_4b_lora_memory_opt_${TIMESTAMP}"
+if [ ! -d "$CKPT_DIR" ]; then
+    echo "Creating checkpoint directory: $CKPT_DIR"
+    mkdir -p $CKPT_DIR
+else
+    echo "Using existing checkpoint directory: $CKPT_DIR"
+fi
+
+# Memory optimization environment variables
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export TORCH_CUDA_MEMORY_FRACTION=0.9
+
+# Environment variables
+export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
+export DEBUG_PARSER=0
+
+# Disable taxonomy feedback for pure task rewards
+export TAXONOMY_FEEDBACK="false"
+
+# Enable VLLM settings
+export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
+export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
+
+# Training command
+cd "$(dirname "$0")"
+
+# Add SkyRL modules to Python path
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL_mod/skyrl-gym:$(pwd)/../tau_bench:$(pwd)/../tau_bench_env:$(pwd)/../data_prep:$(pwd)/.."
+
+# Kill any existing Ray processes
+ray stop || true
+
+echo "========================================="
+echo "Memory-Optimized 4B GRPO Training with LoRA on Retail Domain"
+echo "========================================="
 echo "Model: $POLICY_MODEL"
-echo "LoRA Rank: $LORA_RANK, Alpha: $LORA_ALPHA"
-echo "Batch size optimizations: AGGRESSIVE"
-echo "Checkpoint: $CKPT_DIR"
-echo "Export: $EXPORT_DIR"
-echo "=========================================="
+echo "Domain: Retail only"
+echo "LoRA Configuration (Memory Optimized):"
+echo "  - Rank: $LORA_RANK"
+echo "  - Alpha: $LORA_ALPHA"
+echo "  - Dropout: $LORA_DROPOUT"
+echo "Memory Optimization: LoRA + Aggressive Batch Size Reduction"
+echo "WandB Project: tau_bench_retail_grpo_4b_lora_memory_opt"
+echo ""
 
-# Run from root directory
-cd "$(dirname "$0")" || exit 1
-
-# Memory-optimized training command
-python main_tau_bench.py \
+HYDRA_FULL_ERROR=1 python main_tau_bench.py \
+  trainer.policy.model.path="$POLICY_MODEL" \
+  trainer.ref.model.path="$REF_MODEL" \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
+  trainer.placement.ref_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.critic_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.reward_num_gpus_per_node=$NUM_GPUS \
   generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
@@ -100,11 +131,33 @@ python main_tau_bench.py \
   generator.enforce_eager=true \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
+  generator.sampling_params.temperature=0.8 \
+  generator.sampling_params.top_p=0.9 \
+  +generator.sampling_params.repetition_penalty=1.05 \
+  +generator.sampling_params.frequency_penalty=0.5 \
+  +generator.sampling_params.presence_penalty=0.1 \
+  generator.zero_reward_on_length_threshold=true \
+  generator.max_assistant_response_tokens=1024 \
+  generator.override_existing_update_group="force_new" \
+  generator.use_native_tool_calling=true \
+  environment.env_class="tau_bench" \
+  environment.skyrl_gym.tau_bench.user_strategy="llm" \
+  environment.skyrl_gym.tau_bench.user_model="gpt-4o" \
+  environment.skyrl_gym.tau_bench.user_provider="openai" \
   environment.skyrl_gym.tau_bench.max_turns=10 \
-  environment.skyrl_gym.tau_bench.use_native_tool_calling=false \
-  wandb.project=$WANDB_PROJECT \
-  wandb.name=$WANDB_RUN_NAME
+  environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
+  environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
+  environment.skyrl_gym.max_env_workers=8 \
+  trainer.logger="wandb" \
+  trainer.project_name="tau_bench_retail_grpo_4b_lora_memory_opt" \
+  trainer.run_name="retail_4b_grpo_lora_memory_opt_r${LORA_RANK}_$(date +%Y%m%d_%H%M%S)" \
+  trainer.resume_mode=latest \
+  data.train_data="['$DATA_DIR/train.parquet']" \
+  data.val_data="['$DATA_DIR/validation.parquet']" \
+  $@
 
-echo "Memory-optimized training completed!"
-echo "Checkpoint saved to: $CKPT_DIR"
-echo "Model exported to: $EXPORT_DIR"
+echo "Memory-optimized LoRA Training completed!"
+echo "Checkpoints saved to: $CKPT_DIR"
+echo "Exports saved to: $EXPORT_DIR"
+echo "LoRA rank: $LORA_RANK, alpha: $LORA_ALPHA (Memory Optimized)"
+echo "Training approach: Parameter-efficient fine-tuning with LoRA adapters + Aggressive Memory Optimization"
