@@ -47,7 +47,8 @@ echo "Checkpoint: $CKPT_DIR"
 echo "Export: $EXPORT_DIR"
 echo "=========================================="
 
-cd "$(dirname "$0")/.." || exit 1
+# Run from root directory
+cd "$(dirname "$0")" || exit 1
 
 # Memory-optimized training command with LLM Judge
 python main_tau_bench.py \
@@ -104,11 +105,8 @@ python main_tau_bench.py \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
   environment.skyrl_gym.tau_bench.max_turns=10 \
-  environment.skyrl_gym.tau_bench.reward_config.score_type=value_difference_full \
-  environment.skyrl_gym.tau_bench.reward_config.llm_judge_alpha=$TAXONOMY_ALPHA \
-  environment.skyrl_gym.tau_bench.reward_config.llm_judge_model=gpt-4o \
-  environment.skyrl_gym.tau_bench.reward_config.llm_judge_provider=openai \
-  environment.skyrl_gym.tau_bench.reward_config.use_llm_judge=true \
+  environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
+  environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=$TAXONOMY_ALPHA \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=false \
   wandb.project=$WANDB_PROJECT \
   wandb.name=$WANDB_RUN_NAME
