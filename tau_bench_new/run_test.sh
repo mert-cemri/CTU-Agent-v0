@@ -3,7 +3,7 @@
 # Simple script to run tau_bench tests with VLLM
 
 # Set default values (can be overridden via command line arguments)
-DOMAIN=${1:-"retail"}
+DOMAIN=${1:-"healthcare"}
 MODEL=${2:-"Qwen/Qwen3-8B"}
 NUM_TASKS=${3:-5}
 MAX_MODEL_LEN=${4:-32768}
