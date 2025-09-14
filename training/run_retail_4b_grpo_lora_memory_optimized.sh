@@ -47,7 +47,7 @@ echo "=========================================="
 cd "$(dirname "$0")" || exit 1
 
 # Memory-optimized training command
-python main_tau_bench.py \
+python training/main_tau_bench.py \
   trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.critic_num_gpus_per_node=$NUM_GPUS \
   trainer.placement.reward_num_gpus_per_node=$NUM_GPUS \
