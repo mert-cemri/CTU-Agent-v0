@@ -43,8 +43,6 @@ export TAXONOMY_FEEDBACK="false"
 # Enable VLLM settings (for 4B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
-# Memory optimization to avoid fragmentation
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Training command
 cd "$(dirname "$0")"

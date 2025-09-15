@@ -45,8 +45,6 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1"}  # Slightly higher weight for 4B mo
 # Enable VLLM settings (optimized for 4B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
-# Memory optimization
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Training command
 cd "$(dirname "$0")"
