@@ -45,6 +45,8 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"1"}  # Slightly higher weight for 4B mo
 # Enable VLLM settings (optimized for 4B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
+# Memory optimization
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Training command
 cd "$(dirname "$0")"
@@ -62,7 +64,7 @@ echo "Model: $POLICY_MODEL"
 echo "Domain: Retail only"
 echo "Taxonomy Feedback: ENABLED (alpha=$TAXONOMY_ALPHA)"
 echo "WandB Project: tau_bench_retail_grpo_4b_with_taxonomy"
-echo "Memory Optimized: YES (4B model - efficient settings)"
+echo "Memory Optimized: YES (4B model - OOM fixes applied)"
 echo "Simplified Reward Structure: ENABLED"
 echo ""
 
@@ -85,13 +87,13 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=8 \
-  trainer.policy_mini_batch_size=4 \
-  trainer.critic_mini_batch_size=4 \
+  trainer.train_batch_size=4 \
+  trainer.policy_mini_batch_size=2 \
+  trainer.critic_mini_batch_size=2 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=4 \
+  trainer.max_prompt_length=8192 \
+  trainer.eval_batch_size=2 \
   trainer.eval_before_train=true \
   trainer.eval_interval=10 \
   trainer.policy.optimizer_config.lr=5.0e-6 \
@@ -118,10 +120,10 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
-  generator.gpu_memory_utilization=0.35 \
-  generator.max_input_length=16384 \
-  generator.max_num_batched_tokens=16384 \
+  generator.n_samples_per_prompt=2 \
+  generator.gpu_memory_utilization=0.30 \
+  generator.max_input_length=8192 \
+  generator.max_num_batched_tokens=8192 \
   generator.enforce_eager=true \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
