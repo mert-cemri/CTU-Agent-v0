@@ -202,3 +202,36 @@ python test.py --mode vllm \
 # echo "   bash start_vllm_server.sh Qwen/Qwen2.5-3B-Instruct 8000 8192 0.35 0"
 # echo "   bash start_vllm_server.sh your-model 8001 16384 0.4 1"
 # echo "=================================================="
+
+
+export OUTPUT_BASE="${OUTPUT_BASE:-testing_results}"
+python test.py --mode vllm \
+    --model Qwen/Qwen3-8B \
+    --base-url http://localhost:8000/v1 \
+    --env retail \
+    --max-concurrency 2 \
+    --output-dir $OUTPUT_BASE/qwen3_8b_retail
+
+export OUTPUT_BASE="${OUTPUT_BASE:-testing_results}"
+python test.py --mode vllm \
+    --model Qwen/Qwen3-8B \
+    --base-url http://localhost:8000/v1 \
+    --env airline \
+    --max-concurrency 2 \
+    --output-dir $OUTPUT_BASE/qwen3_8b_airline
+
+export OUTPUT_BASE="${OUTPUT_BASE:-testing_results}"
+python test.py --mode vllm \
+    --model Qwen/Qwen3-4B-Instruct-2507 \
+    --base-url http://localhost:8001/v1 \
+    --env retail \
+    --max-concurrency 2 \
+    --output-dir $OUTPUT_BASE/qwen3_4b_instruct_retail
+
+export OUTPUT_BASE="${OUTPUT_BASE:-testing_results}"
+python test.py --mode vllm \
+    --model Qwen/Qwen3-4B-Instruct-2507 \
+    --base-url http://localhost:8001/v1 \
+    --env airline \
+    --max-concurrency 2 \
+    --output-dir $OUTPUT_BASE/qwen3_4b_instruct_airline
