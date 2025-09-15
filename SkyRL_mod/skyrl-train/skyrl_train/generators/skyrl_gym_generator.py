@@ -346,7 +346,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         
         # Apply length-based reward filtering for batched generation as well
         if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
-            rewards = self._zero_reward_on_length_threshold(rewards, responses)
+            rewards = self._zero_reward_on_length_threshold(rewards, responses, conversation_histories)
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -419,7 +419,7 @@ class SkyRLGymGenerator(GeneratorInterface):
         
         if getattr(self.generator_cfg, 'zero_reward_on_length_threshold', False):
             # set reward to 0 if response length exceeds threshold (DAPO-style filtering)
-            rewards = self._zero_reward_on_length_threshold(rewards, responses)
+            rewards = self._zero_reward_on_length_threshold(rewards, responses, conversation_histories)
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -469,15 +469,17 @@ class SkyRLGymGenerator(GeneratorInterface):
                 rewards[i] = 0.0
         return rewards
 
-    def _zero_reward_on_length_threshold(self, rewards: List[float], responses: List[List[int]]):
-        """Sets the reward to 0 if the response length exceeds the specified threshold.
+    def _zero_reward_on_length_threshold(self, rewards: List[float], responses: List[List[int]], conversation_histories: List = None):
+        """Sets the reward to 0 if any individual assistant response exceeds the specified threshold.
         
-        This implements DAPO-style length-based filtering where overly long responses receive zero reward.
-        Useful for preventing reward hacking through verbose responses and encouraging conciseness.
+        This implements DAPO-style length-based filtering where overly long individual responses receive zero reward.
+        The key fix: Only penalize if a SINGLE assistant response is too long, not if the cumulative 
+        conversation length exceeds the threshold due to multiple turns.
         
         Args:
             rewards: List of reward values
-            responses: List of response token sequences
+            responses: List of response token sequences (for fallback if no conversation_histories)
+            conversation_histories: List of conversation histories (preferred for accurate filtering)
             
         Returns:
             List of filtered reward values
@@ -485,13 +487,46 @@ class SkyRLGymGenerator(GeneratorInterface):
         max_tokens = getattr(self.generator_cfg, 'max_assistant_response_tokens', 2048)
         filtered_count = 0
         
-        for i, response_tokens in enumerate(responses):
-            if len(response_tokens) > max_tokens:
+        for i in range(len(rewards)):
+            should_filter = False
+            
+            # Preferred method: Check individual assistant messages in conversation history
+            if conversation_histories and i < len(conversation_histories):
+                conversation = conversation_histories[i]
+                for message in conversation:
+                    if message.get("role") == "assistant":
+                        # Check length of this specific assistant response
+                        content = message.get("content", "")
+                        content_tokens = self.tokenizer.encode(content, add_special_tokens=False)
+                        if len(content_tokens) > max_tokens:
+                            should_filter = True
+                            # Debug logging for this specific case
+                            if os.environ.get("DEBUG_LENGTH_FILTERING", "0") == "1":
+                                print(f"  Filtering conversation {i}: assistant response has {len(content_tokens)} tokens (>{max_tokens})")
+                                print(f"    Content preview: {content[:100]}...")
+                            break
+            else:
+                # Fallback method: Use cumulative response length (original behavior)
+                # This is less accurate for multi-turn conversations but preserves compatibility
+                if i < len(responses) and len(responses[i]) > max_tokens:
+                    should_filter = True
+            
+            if should_filter:
                 rewards[i] = 0.0
                 filtered_count += 1
         
         if filtered_count > 0:
-            print(f"Length filtering: Set {filtered_count}/{len(responses)} responses to zero reward (>{max_tokens} tokens)")
+            method = "individual response" if conversation_histories else "cumulative response"
+            print(f"Length filtering ({method}): Set {filtered_count}/{len(responses)} responses to zero reward (>{max_tokens} tokens)")
+            
+            # Debug logging to help verify the fix
+            if os.environ.get("DEBUG_LENGTH_FILTERING", "0") == "1":
+                print(f"  Method used: {method}")
+                print(f"  Max tokens threshold: {max_tokens}")
+                if conversation_histories:
+                    print(f"  Analyzed {len(conversation_histories)} conversation histories")
+                else:
+                    print(f"  Fallback: analyzed {len(responses)} cumulative responses")
             
         return rewards
 

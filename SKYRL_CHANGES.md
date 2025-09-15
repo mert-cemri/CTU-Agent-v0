@@ -1737,3 +1737,103 @@ elif bf16:
 - **Universal Coverage**: Handles all model types (Actor, Reward, Critic)
 
 This fix ensures that LoRA training is fully compatible with FSDP's dtype requirements while maintaining the benefits of mixed precision training.
+
+---
+
+### Section 25: Fixed Length Filtering Logic for Multi-Turn Conversations
+
+#### Purpose
+Fix incorrect zero reward assignment due to flawed length filtering that penalized multi-turn conversations based on cumulative length rather than individual response length.
+
+#### Problem Identified
+The length filtering logic was incorrectly penalizing conversations by checking **cumulative conversation length** instead of **individual assistant response length**.
+
+**What Was Wrong:**
+```python
+# OLD LOGIC (INCORRECT)
+for i, response_tokens in enumerate(responses):
+    if len(response_tokens) > max_tokens:  # This checks TOTAL conversation tokens
+        rewards[i] = 0.0
+```
+
+**Issue**: `response_tokens` contains accumulated tokens from ALL turns in the conversation, not just individual assistant responses.
+
+**Result**: Multi-turn conversations were getting zero rewards even when each individual assistant response was reasonably sized, but the cumulative conversation exceeded 2048 tokens.
+
+#### Changes Made
+
+**File**: `/SkyRL_mod/skyrl-train/skyrl_train/generators/skyrl_gym_generator.py`
+
+**1. Updated Function Signature** (Line 472):
+```python
+def _zero_reward_on_length_threshold(self, rewards: List[float], responses: List[List[int]], conversation_histories: List = None):
+```
+
+**2. New Logic - Smart Individual Response Checking**:
+```python
+# NEW LOGIC (FIXED)
+if conversation_histories and i < len(conversation_histories):
+    conversation = conversation_histories[i]
+    for message in conversation:
+        if message.get("role") == "assistant":
+            content = message.get("content", "")
+            content_tokens = self.tokenizer.encode(content, add_special_tokens=False)
+            if len(content_tokens) > max_tokens:  # This checks INDIVIDUAL response tokens
+                should_filter = True
+                break
+```
+
+**3. Updated Call Sites** (Lines 349, 422):
+```python
+# Pass conversation_histories for proper analysis
+rewards = self._zero_reward_on_length_threshold(rewards, responses, conversation_histories)
+```
+
+**4. Enhanced Logging**:
+```python
+method = "individual response" if conversation_histories else "cumulative response"
+print(f"Length filtering ({method}): Set {filtered_count}/{len(responses)} responses to zero reward (>{max_tokens} tokens)")
+```
+
+#### Smart Logic Implementation
+- **Preferred Method**: When conversation histories are available, analyze individual assistant messages
+- **Fallback Method**: Use original cumulative logic for compatibility when histories unavailable
+- **Debug Support**: Set `DEBUG_LENGTH_FILTERING=1` for detailed filtering decisions
+
+#### Expected Impact
+
+**Before Fix:**
+```
+Length filtering: Set 4/4 responses to zero reward (>2048 tokens)
+```
+- Many legitimate multi-turn conversations getting zero reward
+- Model discouraged from engaging in helpful multi-turn interactions
+
+**After Fix:**
+```
+Length filtering (individual response): Set 0/4 responses to zero reward (>2048 tokens)
+```
+- Only genuinely verbose individual responses get penalized
+- Multi-turn conversations with reasonable individual responses get proper rewards
+- Better training signal for the model
+
+#### Configuration
+The threshold remains configurable via:
+```yaml
+generator:
+  max_assistant_response_tokens: 2048  # Per individual response, not cumulative
+  zero_reward_on_length_threshold: true
+```
+
+#### Verification
+To verify the fix is working:
+1. Enable debug logging: `export DEBUG_LENGTH_FILTERING=1`
+2. Check logs show "individual response" method being used
+3. Monitor that fewer conversations are getting filtered
+4. Verify that only truly verbose single responses (>2048 tokens) get penalized
+
+This fix ensures that:
+- ✅ Individual overly long responses still get penalized (intended behavior)
+- ✅ Multi-turn conversations with reasonable responses get proper rewards
+- ✅ Training signal encourages helpful multi-turn interactions
+- ✅ Backward compatibility maintained with fallback logic
