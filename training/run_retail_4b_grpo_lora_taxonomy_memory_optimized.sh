@@ -160,7 +160,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
-  $@
+ 
 
 echo "Memory-optimized taxonomy LoRA Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"

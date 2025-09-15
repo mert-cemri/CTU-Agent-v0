@@ -12,15 +12,21 @@ EPOCHS=100
 # Model Configuration
 # Replace this path with your SFT model path
 # POLICY_MODEL="/path/to/your/sft/model"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
-POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
+# mcemri/qwen2.5_3b_alldata_sft_v0
+POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "your-hf-username/your-sft-model"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v2-z0
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
 
-# Make sure required directories exist
-CKPT_DIR="$HOME/ckpts/tau_bench/${MODEL_NAME_SANITIZED}"
+# Get the CTU-Agent-v0 root directory
+CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+
+# Make sure required directories exist with unique run names
+RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_taxonomy_${RUN_TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -37,9 +43,9 @@ export DEBUG_PARSER=0
 export TAXONOMY_FEEDBACK="true"
 export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
-# Conservative VLLM settings for memory
+# VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=20000
+export VLLM_MAX_MODEL_LEN=8192  # Conservative for memory
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -78,15 +84,15 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.inference_engine_tensor_parallel_size=$TENSOR_PARALLEL_SIZE \
   trainer.ckpt_path="$CKPT_DIR" \
   trainer.resume_path=null \
-  trainer.export_path="$HOME/exports/tau_bench_retail" \
+  trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
   trainer.train_batch_size=8 \
   trainer.policy_mini_batch_size=4 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=16384 \
-  trainer.eval_batch_size=4 \
-  trainer.eval_before_train=true \
+  trainer.max_prompt_length=8192 \
+  trainer.eval_batch_size=2 \
+  trainer.eval_before_train=false \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \
@@ -100,10 +106,10 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=2 \
-  generator.gpu_memory_utilization=0.4 \
-  generator.max_input_length=16384 \
+  generator.gpu_memory_utilization=0.3 \
+  generator.max_input_length=8192 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=512 \
+  generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
@@ -116,16 +122,16 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA="$TAXONOMY_ALPHA" \
-  environment.skyrl_gym.max_env_workers=4 \
+  environment.skyrl_gym.max_env_workers=12 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_retail_grpo" \
   trainer.run_name="retail_3b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
- 
+  $@
 
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
-echo "Exports saved to: $HOME/exports/tau_bench_retail"
+echo "Exports saved to: $EXPORT_DIR"
 echo "Taxonomy alpha: $TAXONOMY_ALPHA"

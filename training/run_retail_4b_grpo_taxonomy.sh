@@ -149,8 +149,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.run_name="retail_4b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
-  data.val_data="['$DATA_DIR/validation.parquet']" \
-  $@
+  data.val_data="['$DATA_DIR/validation.parquet']"
 
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
