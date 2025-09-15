@@ -139,6 +139,7 @@ class Env(object):
 
     def calculate_reward(self) -> RewardResult:
         from copy import deepcopy
+        import os
         
         # CRITICAL FIX: Save current state before corruption
         original_data = deepcopy(self.data)
@@ -150,12 +151,88 @@ class Env(object):
 
         # Check if the database changes are correct. If they are not correct, then we set the reward to 0.
         # TODO: cache gt_data_hash in tasks.py (low priority)
+        
+        # Step-by-step hash comparison for debugging
+        debug_hashes = os.environ.get("DEBUG_HASH_COMPARISON", "0") == "1"
+        
+        if debug_hashes:
+            print("\n" + "="*80)
+            print("STEP-BY-STEP HASH COMPARISON")
+            print("="*80)
+            print(f"Initial agent hash after all actions: {data_hash[:32]}...")
+            
+            # Track agent's actions that modified state
+            print("\nAgent's executed actions (non-respond only):")
+            agent_tool_actions = [a for a in self.actions if a.name != RESPOND_ACTION_NAME]
+            for i, action in enumerate(agent_tool_actions):
+                print(f"  {i+1}. {action.name}")
+                if hasattr(action, 'kwargs'):
+                    print(f"     kwargs: {action.kwargs}")
+            
+            print("\n" + "-"*40)
+            print("Replaying ground truth actions...")
+            print("-"*40)
+        
         # Use fresh environment for ground truth simulation
         self.data = self.data_load_func()
-        for action in self.task.actions:
+        
+        if debug_hashes:
+            fresh_hash = self.get_data_hash()
+            print(f"Fresh data hash: {fresh_hash[:32]}...")
+        
+        # OLD CODE COMMENTED OUT:
+        # for action in self.task.actions:
+        #     if action.name not in self.terminate_tools:
+        #         self.step(action)
+        
+        # CRITICAL BUG FIX: Save original actions list to avoid pollution
+        original_actions = self.actions.copy()
+        
+        # NEW CODE: Track hash after each ground truth action
+        for i, action in enumerate(self.task.actions):
             if action.name not in self.terminate_tools:
+                if debug_hashes:
+                    print(f"\n{i+1}. Executing GT action: {action.name}")
+                    if hasattr(action, 'arguments'):
+                        print(f"   arguments: {action.arguments}")
+                    elif hasattr(action, 'kwargs'):
+                        print(f"   kwargs: {action.kwargs}")
+                
+                # Execute the action
                 self.step(action)
+                
+                if debug_hashes:
+                    current_hash = self.get_data_hash()
+                    print(f"   Hash after action: {current_hash[:32]}...")
+                    
+                    # Check if this action changed the hash
+                    if i == 0:
+                        prev_hash = fresh_hash
+                    else:
+                        prev_hash = prev_gt_hashes[-1] if 'prev_gt_hashes' in locals() else fresh_hash
+                    
+                    if current_hash != prev_hash:
+                        print(f"   ✓ Hash changed (state modified)")
+                    else:
+                        print(f"   - Hash unchanged (read-only or no-op)")
+                    
+                    # Track hashes for comparison
+                    if 'prev_gt_hashes' not in locals():
+                        prev_gt_hashes = []
+                    prev_gt_hashes.append(current_hash)
+        
         gt_data_hash = self.get_data_hash()
+        
+        if debug_hashes:
+            print("\n" + "="*80)
+            print("FINAL COMPARISON:")
+            print(f"Agent final hash:  {data_hash[:32]}...")
+            print(f"GT final hash:     {gt_data_hash[:32]}...")
+            print(f"Hashes match:      {data_hash == gt_data_hash}")
+            print("="*80 + "\n")
+        
+        # CRITICAL BUG FIX: Restore original actions list after ground truth replay
+        self.actions = original_actions
         
         # CRITICAL FIX: Restore original state to prevent corruption
         self.data = original_data

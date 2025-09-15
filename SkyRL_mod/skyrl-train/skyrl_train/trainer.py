@@ -394,7 +394,46 @@ class RayPPOTrainer:
                         
                         # For backward compatibility, also provide the raw decoded fields
                         input_prompt = self.tokenizer.decode(generator_output["prompt_token_ids"][i], skip_special_tokens=True).strip()
-                        output_response = self.tokenizer.decode(generator_output["response_ids"][i], skip_special_tokens=True).strip()
+                        
+                        # FIX: Properly format the conversation with correct role labels
+                        # Tool responses should be marked as "tool", not "user"
+                        if conversation_history and isinstance(conversation_history, list):
+                            # Build formatted output that preserves the conversation structure
+                            formatted_parts = []
+                            
+                            # Start from where the initial prompt ends (skip system/initial user)
+                            for idx, msg in enumerate(conversation_history):
+                                if isinstance(msg, dict):
+                                    role = msg.get("role", "")
+                                    content = msg.get("content", "")
+                                    
+                                    # Skip initial system and user messages (they're in input_prompt)
+                                    if idx < 2 and role in ["system", "user"]:
+                                        continue
+                                    
+                                    # Format based on role
+                                    if role == "assistant":
+                                        formatted_parts.append(f"assistant\n{content}")
+                                    elif role == "tool":
+                                        # Keep <tool_response> markers for clarity
+                                        if not content.startswith("<tool_response>"):
+                                            formatted_parts.append(f"tool\n<tool_response>\n{content}\n</tool_response>")
+                                        else:
+                                            formatted_parts.append(f"tool\n{content}")
+                                    elif role == "user":
+                                        formatted_parts.append(f"user\n{content}")
+                            
+                            output_response = "\n".join(formatted_parts) if formatted_parts else ""
+                        else:
+                            # Fallback to raw decoding if no proper conversation history
+                            # But try to fix obvious misformatting
+                            raw_response = self.tokenizer.decode(generator_output["response_ids"][i], skip_special_tokens=True).strip()
+                            
+                            # Quick fix: Replace "user\n<tool_response>" with "tool\n<tool_response>"
+                            if "user\n<tool_response>" in raw_response:
+                                output_response = raw_response.replace("user\n<tool_response>", "tool\n<tool_response>")
+                            else:
+                                output_response = raw_response
                         
                         entry = {
                             "global_step": self.global_step,
