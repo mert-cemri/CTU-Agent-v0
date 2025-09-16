@@ -220,24 +220,46 @@ def compute_grpo_outcome_advantage(
 
     with torch.no_grad():
         bsz = scores.shape[0]
+        print(f"*** GRPO DETAILED DEBUG: batch_size={bsz}")
+        print(f"*** GRPO DETAILED DEBUG: raw scores before grouping: {scores[:min(5, bsz)].tolist()}")
+        print(f"*** GRPO DETAILED DEBUG: index array: {index[:min(5, bsz)].tolist()}")
+        
         for i in range(bsz):
             id2score[index[i]].append(scores[i])
+            
+        print(f"*** GRPO DETAILED DEBUG: number of unique prompt groups: {len(id2score)}")
+        
         for idx in id2score:
+            group_scores = id2score[idx]
+            print(f"*** GRPO DETAILED DEBUG: Group {idx}: {len(group_scores)} samples, scores={[float(s) for s in group_scores]}")
+            
             if len(id2score[idx]) == 1:
                 id2mean[idx] = torch.tensor(0.0, device=scores.device, dtype=scores.dtype)
                 id2std[idx] = torch.tensor(1.0, device=scores.device, dtype=scores.dtype)
+                print(f"*** GRPO DETAILED DEBUG: Group {idx} single sample: mean=0.0, std=1.0")
             elif len(id2score[idx]) > 1:
                 score_tensor = torch.tensor(id2score[idx], device=scores.device, dtype=scores.dtype)
                 id2mean[idx] = torch.mean(score_tensor)
                 id2std[idx] = torch.std(score_tensor)
+                print(f"*** GRPO DETAILED DEBUG: Group {idx} multi-sample: mean={id2mean[idx]:.6f}, std={id2std[idx]:.6f}")
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
+                
+        print(f"*** GRPO DETAILED DEBUG: normalization enabled: {norm_adv_by_std_in_grpo}")
+        
         for i in range(bsz):
+            old_score = scores[i].item()
             if norm_adv_by_std_in_grpo:
                 scores[i] = (scores[i] - id2mean[index[i]]) / (id2std[index[i]] + epsilon)
             else:
                 scores[i] = scores[i] - id2mean[index[i]]
+            new_score = scores[i].item()
+            if i < 5:  # Show first 5 transformations
+                print(f"*** GRPO DETAILED DEBUG: Sample {i} (group {index[i]}): {old_score:.6f} -> {new_score:.6f}")
+                
+        print(f"*** GRPO DETAILED DEBUG: scores after normalization range=[{scores.min():.6f}, {scores.max():.6f}]")
         scores = scores.unsqueeze(-1) * response_mask
+        print(f"*** GRPO DETAILED DEBUG: scores after mask application range=[{scores.min():.6f}, {scores.max():.6f}]")
         
         print(f"*** GRPO DEBUG: advantages min={scores.min():.6f}, max={scores.max():.6f}, mean={scores.mean():.6f}, std={scores.std():.6f}")
         print(f"*** GRPO DEBUG: response_mask sum={response_mask.sum()}, scores shape={scores.shape}")
@@ -257,6 +279,20 @@ def compute_grpo_outcome_advantage(
     print(f"*** GRPO RETURN DEBUG: final advantages sum={scores.sum():.6f}, non_zero_count={(scores != 0).sum()}")
     print(f"*** GRPO RETURN DEBUG: final advantages shape={scores.shape}")
     
+    # Check for any numerical issues
+    if torch.isnan(scores).any():
+        print("*** GRPO ERROR: NaN values in final advantages!")
+    if torch.isinf(scores).any():
+        print("*** GRPO ERROR: Inf values in final advantages!")
+    
+    # Sample some advantage values to check distribution
+    non_zero_mask = scores != 0
+    if non_zero_mask.any():
+        non_zero_values = scores[non_zero_mask]
+        print(f"*** GRPO RETURN DEBUG: non-zero advantages - min={non_zero_values.min():.6f}, max={non_zero_values.max():.6f}, std={non_zero_values.std():.6f}")
+        # Show first 10 non-zero advantages
+        print(f"*** GRPO RETURN DEBUG: sample non-zero advantages: {non_zero_values[:10].tolist()}")
+    
     return scores, scores
 
 
@@ -270,6 +306,9 @@ def compute_advantages_and_returns(
     gamma=1.0,
     lambd=1.0,
 ):
+    print(f"*** ADVANTAGE ESTIMATOR DEBUG: Using {adv_estimator} estimator")
+    print(f"*** ADVANTAGE ESTIMATOR DEBUG: token_level_rewards shape={token_level_rewards.shape}, sum={token_level_rewards.sum():.6f}")
+    print(f"*** ADVANTAGE ESTIMATOR DEBUG: response_mask shape={response_mask.shape}, sum={response_mask.sum():.0f}")
     if adv_estimator == "gae":
         advantages, returns = compute_gae_advantage_return(
             token_level_rewards=token_level_rewards,
@@ -287,4 +326,10 @@ def compute_advantages_and_returns(
         )
     else:
         raise ValueError(f"Invalid adv_estimator: {adv_estimator}")
+    
+    # Final debug before returning to policy training
+    print(f"*** FINAL ADVANTAGES DEBUG: advantages range=[{advantages.min():.6f}, {advantages.max():.6f}], mean={advantages.mean():.6f}")
+    print(f"*** FINAL ADVANTAGES DEBUG: returns range=[{returns.min():.6f}, {returns.max():.6f}], mean={returns.mean():.6f}")
+    print(f"*** FINAL ADVANTAGES DEBUG: advantages non-zero count: {(advantages != 0).sum()}")
+    
     return advantages, returns
