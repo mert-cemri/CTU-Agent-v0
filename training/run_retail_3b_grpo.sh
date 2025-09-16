@@ -14,7 +14,7 @@ EPOCHS=100
 # POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "mcemri/qwen2.5_3b_alldata_sft_v0"
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_after_sft_v3
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_v4
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -44,7 +44,7 @@ export TAXONOMY_ALPHA="0.0"
 
 # VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=8192  # Conservative for memory
+# export VLLM_MAX_MODEL_LEN=8192  # Conservative for memory
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # PyTorch memory optimization
@@ -105,9 +105,14 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.gpu_memory_utilization=0.3 \
   generator.max_input_length=8192 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=1024 \
+  generator.sampling_params.max_generate_length=512 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=0.9 \
+  +generator.sampling_params.repetition_penalty=1.05 \
+  +generator.sampling_params.frequency_penalty=0.5 \
+  +generator.sampling_params.presence_penalty=0.1 \
+  generator.zero_reward_on_length_threshold=true \
+  generator.max_assistant_response_tokens=2048 \
   generator.override_existing_update_group="force_new" \
   generator.use_native_tool_calling=true \
   environment.env_class="tau_bench" \
@@ -118,7 +123,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
-  environment.skyrl_gym.max_env_workers=12 \
+  environment.skyrl_gym.max_env_workers=4 \
   trainer.logger="wandb" \
   trainer.project_name="tau_bench_retail_grpo" \
   trainer.run_name="retail_3b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
