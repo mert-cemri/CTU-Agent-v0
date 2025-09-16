@@ -241,7 +241,22 @@ def compute_grpo_outcome_advantage(
         
         print(f"*** GRPO DEBUG: advantages min={scores.min():.6f}, max={scores.max():.6f}, mean={scores.mean():.6f}, std={scores.std():.6f}")
         print(f"*** GRPO DEBUG: response_mask sum={response_mask.sum()}, scores shape={scores.shape}")
+        
+        # Check if response_mask is problematic
+        print(f"*** GRPO MASK DEBUG: response_mask shape={response_mask.shape}, dtype={response_mask.dtype}")
+        print(f"*** GRPO MASK DEBUG: response_mask min={response_mask.min():.2f}, max={response_mask.max():.2f}")
+        print(f"*** GRPO MASK DEBUG: Percentage of non-zero mask values: {(response_mask > 0).float().mean()*100:.2f}%")
+        
+        # Sample some mask values to see the pattern
+        if response_mask.numel() > 0:
+            sample_idx = min(3, response_mask.shape[0]-1)
+            print(f"*** GRPO MASK DEBUG: Sample mask row {sample_idx} first 20 values: {response_mask[sample_idx, :20].tolist()}")
 
+    # Final debug check
+    print(f"*** GRPO RETURN DEBUG: final advantages min={scores.min():.6f}, max={scores.max():.6f}")
+    print(f"*** GRPO RETURN DEBUG: final advantages sum={scores.sum():.6f}, non_zero_count={(scores != 0).sum()}")
+    print(f"*** GRPO RETURN DEBUG: final advantages shape={scores.shape}")
+    
     return scores, scores
 
 
