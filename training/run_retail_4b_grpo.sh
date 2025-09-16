@@ -110,11 +110,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-<<<<<<< HEAD
-  generator.n_samples_per_prompt=4 \
-=======
   generator.n_samples_per_prompt=1 \
->>>>>>> 0029e302f01c5ee1edba322991146a69844d0e37
   generator.gpu_memory_utilization=0.30 \
   generator.max_input_length=8192 \
   generator.max_num_batched_tokens=8192 \
