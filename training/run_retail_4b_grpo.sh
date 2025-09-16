@@ -12,7 +12,7 @@ EPOCHS=80
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen3-4B-Instruct-2507"
 REF_MODEL="Qwen/Qwen3-4B-Instruct-2507"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v2
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v5
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
