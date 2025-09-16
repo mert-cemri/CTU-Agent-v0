@@ -180,6 +180,7 @@ def compute_grpo_outcome_advantage(
     epsilon: float = 1e-6,
     norm_adv_by_std_in_grpo: bool = True,
 ):
+    print("*** USING SKYRL_MOD VERSION - DEVICE FIX APPLIED ***")
     """
     Compute advantage for GRPO, operating only on Outcome reward (with only one scalar reward for each response).
 
@@ -207,11 +208,12 @@ def compute_grpo_outcome_advantage(
             id2score[index[i]].append(scores[i])
         for idx in id2score:
             if len(id2score[idx]) == 1:
-                id2mean[idx] = torch.tensor(0.0)
-                id2std[idx] = torch.tensor(1.0)
+                id2mean[idx] = torch.tensor(0.0, device=scores.device, dtype=scores.dtype)
+                id2std[idx] = torch.tensor(1.0, device=scores.device, dtype=scores.dtype)
             elif len(id2score[idx]) > 1:
-                id2mean[idx] = torch.mean(torch.tensor(id2score[idx]))
-                id2std[idx] = torch.std(torch.tensor(id2score[idx])) # Changed from torch.std(torch.tensor([id2score[idx]])) to torch.std(torch.tensor(id2score[idx]))
+                score_tensor = torch.tensor(id2score[idx], device=scores.device, dtype=scores.dtype)
+                id2mean[idx] = torch.mean(score_tensor)
+                id2std[idx] = torch.std(score_tensor)
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
