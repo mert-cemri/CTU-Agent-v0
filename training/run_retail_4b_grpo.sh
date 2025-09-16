@@ -12,7 +12,7 @@ EPOCHS=80
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen3-4B-Instruct-2507"
 REF_MODEL="Qwen/Qwen3-4B-Instruct-2507"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v1
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_no_taxonomy_v2
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -84,7 +84,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=8192 \
   trainer.eval_batch_size=2 \
-  trainer.eval_before_train=true \
+  trainer.eval_before_train=false \
   trainer.eval_interval=10 \
   trainer.policy.optimizer_config.lr=5.0e-6 \
   trainer.policy.optimizer_config.num_warmup_steps=50 \
