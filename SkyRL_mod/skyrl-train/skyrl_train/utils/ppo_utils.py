@@ -112,10 +112,22 @@ def normalize_advantages_dict(data: TrainingInputBatch) -> TrainingInputBatch:
     std: float = ((advantages - mean).pow(2) * response_masks).sum()
     rstd: float = (std / num_actions).clamp(min=1e-8).rsqrt()
 
+    # Debug before normalization
+    print(f"*** ADVANTAGE NORM DEBUG: input advantages shape={advantages.shape}")
+    print(f"*** ADVANTAGE NORM DEBUG: response_masks sum={response_masks.sum():.0f}, num_actions={num_actions:.0f}")
+    print(f"*** ADVANTAGE NORM DEBUG: mean={mean:.6f}, std={std:.6f}, rstd={rstd:.6f}")
+    print(f"*** ADVANTAGE NORM DEBUG: before norm min={advantages.min():.6f}, max={advantages.max():.6f}")
+    
     data["advantages"] = (advantages - mean) * rstd
     
-    print(f"*** ADVANTAGE NORM DEBUG: before norm min={advantages.min():.6f}, max={advantages.max():.6f}")
     print(f"*** ADVANTAGE NORM DEBUG: after norm min={data['advantages'].min():.6f}, max={data['advantages'].max():.6f}")
+    print(f"*** ADVANTAGE NORM DEBUG: after norm mean={data['advantages'].mean():.6f}, std={data['advantages'].std():.6f}")
+    
+    # Check if advantages are all zeros or NaNs
+    if torch.isnan(data["advantages"]).any():
+        print("*** WARNING: NaN values in normalized advantages!")
+    if (data["advantages"] == 0).all():
+        print("*** WARNING: All advantages are exactly zero after normalization!")
     
     return data
 
