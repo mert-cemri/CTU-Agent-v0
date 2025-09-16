@@ -17,7 +17,7 @@ EPOCHS=100
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 # MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v7
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v8
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -27,7 +27,7 @@ CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist with unique run names
 RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
-CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}_${RUN_TIMESTAMP}"
+CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}
 EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_taxonomy_${RUN_TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
