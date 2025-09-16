@@ -106,8 +106,8 @@ def normalize_advantages_dict(data: TrainingInputBatch) -> TrainingInputBatch:
     advantages: Float[torch.Tensor, "batch_size seqlen"] = data["advantages"]
     response_masks: Float[torch.Tensor, "batch_size seqlen"] = data["response_mask"]
     num_actions: float = response_masks.sum()
-    # mean
-    mean: float = advantages.mean()
+    # mean - should be masked mean, not global mean
+    mean: float = (advantages * response_masks).sum() / num_actions # Changed from advantages.mean() to (advantages * response_masks).sum() / num_actions
     # std
     std: float = ((advantages - mean).pow(2) * response_masks).sum()
     rstd: float = (std / num_actions).clamp(min=1e-8).rsqrt()
@@ -211,7 +211,7 @@ def compute_grpo_outcome_advantage(
                 id2std[idx] = torch.tensor(1.0)
             elif len(id2score[idx]) > 1:
                 id2mean[idx] = torch.mean(torch.tensor(id2score[idx]))
-                id2std[idx] = torch.std(torch.tensor([id2score[idx]]))
+                id2std[idx] = torch.std(torch.tensor(id2score[idx])) # Changed from torch.std(torch.tensor([id2score[idx]])) to torch.std(torch.tensor(id2score[idx]))
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
         for i in range(bsz):
