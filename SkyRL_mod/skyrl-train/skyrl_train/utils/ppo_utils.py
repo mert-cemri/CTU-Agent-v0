@@ -113,6 +113,10 @@ def normalize_advantages_dict(data: TrainingInputBatch) -> TrainingInputBatch:
     rstd: float = (std / num_actions).clamp(min=1e-8).rsqrt()
 
     data["advantages"] = (advantages - mean) * rstd
+    
+    print(f"*** ADVANTAGE NORM DEBUG: before norm min={advantages.min():.6f}, max={advantages.max():.6f}")
+    print(f"*** ADVANTAGE NORM DEBUG: after norm min={data['advantages'].min():.6f}, max={data['advantages'].max():.6f}")
+    
     return data
 
 
@@ -222,6 +226,9 @@ def compute_grpo_outcome_advantage(
             else:
                 scores[i] = scores[i] - id2mean[index[i]]
         scores = scores.unsqueeze(-1) * response_mask
+        
+        print(f"*** GRPO DEBUG: advantages min={scores.min():.6f}, max={scores.max():.6f}, mean={scores.mean():.6f}, std={scores.std():.6f}")
+        print(f"*** GRPO DEBUG: response_mask sum={response_mask.sum()}, scores shape={scores.shape}")
 
     return scores, scores
 
