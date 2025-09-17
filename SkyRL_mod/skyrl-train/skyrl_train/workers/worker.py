@@ -379,24 +379,62 @@ class PolicyLoss(nn.Module):
         loss_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, float]:
 
+        # === SKYRL POLICY LOSS DEBUG ===
+        print(f"*** SKYRL POLICY LOSS DEBUG: Input shapes - log_probs={log_probs.shape}, old_log_probs={old_log_probs.shape}")
+        print(f"*** SKYRL POLICY LOSS DEBUG: advantages shape={advantages.shape}, loss_mask={loss_mask.shape if loss_mask is not None else None}")
+        print(f"*** SKYRL POLICY LOSS DEBUG: advantages range=[{advantages.min():.6f}, {advantages.max():.6f}], mean={advantages.mean():.6f}")
+        if loss_mask is not None:
+            print(f"*** SKYRL POLICY LOSS DEBUG: loss_mask sum={loss_mask.sum():.0f}, non_zero_pct={100*(loss_mask > 0).float().mean():.1f}%")
+        
+        # Check for numerical issues in inputs
+        if torch.isnan(advantages).any():
+            print("*** SKYRL POLICY LOSS WARNING: NaN values in advantages!")
+        if torch.isnan(log_probs).any():
+            print("*** SKYRL POLICY LOSS WARNING: NaN values in log_probs!")
+        if torch.isnan(old_log_probs).any():
+            print("*** SKYRL POLICY LOSS WARNING: NaN values in old_log_probs!")
+
         ratio = (log_probs - old_log_probs).exp()
+        print(f"*** SKYRL POLICY LOSS DEBUG: log_prob_diff range=[{(log_probs - old_log_probs).min():.6f}, {(log_probs - old_log_probs).max():.6f}]")
+        print(f"*** SKYRL POLICY LOSS DEBUG: ratio range=[{ratio.min():.6f}, {ratio.max():.6f}], mean={ratio.mean():.6f}")
         surr1 = ratio * advantages
         surr2 = ratio.clamp(1 - self.clip_eps_low, 1 + self.clip_eps_high) * advantages
+        print(f"*** SKYRL POLICY LOSS DEBUG: surr1 range=[{surr1.min():.6f}, {surr1.max():.6f}], mean={surr1.mean():.6f}")
+        print(f"*** SKYRL POLICY LOSS DEBUG: surr2 range=[{surr2.min():.6f}, {surr2.max():.6f}], mean={surr2.mean():.6f}")
+        
         loss = -torch.min(surr1, surr2)
+        print(f"*** SKYRL POLICY LOSS DEBUG: initial loss range=[{loss.min():.6f}, {loss.max():.6f}], mean={loss.mean():.6f}")
+        
         clip_ratio = masked_mean((-surr2 > -surr1).float(), loss_mask).mean().detach().item()
         clip_pg_losses1 = loss
         if self.loss_type == "dual_clip":
             pg_losses3 = -advantages * self.clip_ratio_c
             clip_pg_losses2 = torch.min(pg_losses3, clip_pg_losses1)
             loss = torch.where(advantages < 0, clip_pg_losses2, clip_pg_losses1)
+            print(f"*** SKYRL POLICY LOSS DEBUG: after dual_clip, loss range=[{loss.min():.6f}, {loss.max():.6f}], mean={loss.mean():.6f}")
+        
+        print(f"*** SKYRL POLICY LOSS DEBUG: loss_reduction={self.loss_reduction}")
         if self.loss_reduction == "token_mean":
             # sum over *all* valid tokens, divide by total valid-token count
+            print(f"*** SKYRL POLICY LOSS DEBUG: before token_mean reduction, loss sum={loss.sum():.6f}")
             loss = masked_mean(loss, loss_mask)
         elif self.loss_reduction == "sequence_mean":
             # per-sequence token-mean (dim=-1), then batch-mean
+            print(f"*** SKYRL POLICY LOSS DEBUG: before sequence_mean reduction, loss sum={loss.sum():.6f}")
             loss = masked_mean(loss, loss_mask, dim=-1).mean()
         else:
             raise ValueError(f"Invalid loss reduction type: {self.loss_reduction}")
+        
+        print(f"*** SKYRL POLICY LOSS DEBUG: FINAL loss={loss:.6f}, clip_ratio={clip_ratio:.6f}")
+        
+        # Final numerical checks
+        if torch.isnan(loss):
+            print("*** SKYRL POLICY LOSS ERROR: Final loss is NaN!")
+        if torch.isinf(loss):
+            print("*** SKYRL POLICY LOSS ERROR: Final loss is Inf!")
+        if loss == 0:
+            print("*** SKYRL POLICY LOSS WARNING: Final loss is exactly zero!")
+            
         return loss, clip_ratio
 
 
