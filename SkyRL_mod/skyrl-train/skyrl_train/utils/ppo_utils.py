@@ -222,7 +222,7 @@ def compute_grpo_outcome_advantage(
         bsz = scores.shape[0]
         print(f"*** GRPO DETAILED DEBUG: batch_size={bsz}")
         print(f"*** GRPO DETAILED DEBUG: raw scores before grouping: {scores[:min(5, bsz)].tolist()}")
-        print(f"*** GRPO DETAILED DEBUG: index array: {index[:min(5, bsz)].tolist()}")
+        print(f"*** GRPO DETAILED DEBUG: index array: {index[:min(5, bsz)]}")
         
         for i in range(bsz):
             id2score[index[i]].append(scores[i])
@@ -231,7 +231,9 @@ def compute_grpo_outcome_advantage(
         
         for idx in id2score:
             group_scores = id2score[idx]
-            print(f"*** GRPO DETAILED DEBUG: Group {idx}: {len(group_scores)} samples, scores={[float(s) for s in group_scores]}")
+            # Convert tensors to float for display
+            scores_list = [float(s.item()) if hasattr(s, 'item') else float(s) for s in group_scores]
+            print(f"*** GRPO DETAILED DEBUG: Group {idx}: {len(group_scores)} samples, scores={scores_list}")
             
             if len(id2score[idx]) == 1:
                 id2mean[idx] = torch.tensor(0.0, device=scores.device, dtype=scores.dtype)
