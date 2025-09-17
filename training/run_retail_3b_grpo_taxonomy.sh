@@ -17,7 +17,7 @@ EPOCHS=100
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 # MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v10
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v11
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -47,7 +47,7 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
 # VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=12288
+export VLLM_MAX_MODEL_LEN=16384
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -93,7 +93,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.critic_mini_batch_size=1 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=7000 \
+  trainer.max_prompt_length=14288 \
   trainer.eval_batch_size=2 \
   trainer.eval_before_train=false \
   trainer.eval_interval=5 \
@@ -118,8 +118,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.async_engine=true \
   generator.n_samples_per_prompt=8 \
   generator.gpu_memory_utilization=0.4 \
-  +generator.max_model_len=10000 \
-  generator.max_input_length=7000 \
+  +generator.max_model_len=16384 \
+  generator.max_input_length=14288 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \

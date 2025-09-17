@@ -244,10 +244,20 @@ def compute_grpo_outcome_advantage(
                 id2mean[idx] = torch.mean(score_tensor)
                 id2std[idx] = torch.std(score_tensor)
                 print(f"*** GRPO DETAILED DEBUG: Group {idx} multi-sample: mean={id2mean[idx]:.6f}, std={id2std[idx]:.6f}")
+                
+                # CRITICAL FIX: Handle identical rewards (std=0) case
+                if id2std[idx] < 1e-8:  # All samples have identical rewards
+                    print(f"*** GRPO CRITICAL FIX: Group {idx} has identical rewards (std={id2std[idx]:.8f}), using small artificial variance")
+                    # Use mean-centering only (no std normalization) for identical reward groups
+                    id2std[idx] = torch.tensor(1.0, device=scores.device, dtype=scores.dtype)  # Disable std normalization
             else:
                 raise ValueError(f"no score in prompt index: {idx}")
                 
         print(f"*** GRPO DETAILED DEBUG: normalization enabled: {norm_adv_by_std_in_grpo}")
+        
+        # Count groups with identical rewards (where our fix applies)
+        identical_reward_groups = sum(1 for idx in id2std if id2std[idx] == 1.0 and len(id2score.get(idx, [])) > 1)
+        print(f"*** GRPO CRITICAL FIX: {identical_reward_groups} groups have identical rewards and will use mean-centering only")
         
         for i in range(bsz):
             old_score = scores[i].item()

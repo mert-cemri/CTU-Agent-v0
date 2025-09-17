@@ -300,6 +300,24 @@ def compute_policy_loss(old_log_prob,
                         loss_agg_mode="token-mean", 
                         preserve_grad: bool = False):
     """Adapted from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1122
+    
+    # === COMPREHENSIVE POLICY LOSS DEBUG ===
+    print(f"*** POLICY LOSS DEBUG: Input shapes - old_log_prob={old_log_prob.shape}, log_prob={log_prob.shape}")
+    print(f"*** POLICY LOSS DEBUG: advantages shape={advantages.shape}, response_mask={response_mask.shape}")
+    print(f"*** POLICY LOSS DEBUG: advantages range=[{advantages.min():.6f}, {advantages.max():.6f}], mean={advantages.mean():.6f}")
+    print(f"*** POLICY LOSS DEBUG: response_mask sum={response_mask.sum():.0f}, non_zero_pct={100*(response_mask > 0).float().mean():.1f}%")
+    print(f"*** POLICY LOSS DEBUG: cliprange={cliprange}, loss_agg_mode={loss_agg_mode}")
+    
+    # Check for numerical issues in inputs
+    if torch.isnan(advantages).any():
+        print("*** POLICY LOSS WARNING: NaN values in advantages!")
+    if torch.isinf(advantages).any():
+        print("*** POLICY LOSS WARNING: Inf values in advantages!")
+    if torch.isnan(old_log_prob).any():
+        print("*** POLICY LOSS WARNING: NaN values in old_log_prob!")
+    if torch.isnan(log_prob).any():
+        print("*** POLICY LOSS WARNING: NaN values in log_prob!")
+    
     Args:
         old_log_prob: `(torch.Tensor)`
             shape: (bs, response_length)
@@ -335,7 +353,13 @@ def compute_policy_loss(old_log_prob,
     ratio = torch.exp(negative_approx_kl)
     ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask, preserve_grad=preserve_grad)
 
+    # Debug intermediate calculations
+    print(f"*** POLICY LOSS DEBUG: negative_approx_kl range=[{negative_approx_kl.min():.6f}, {negative_approx_kl.max():.6f}]")
+    print(f"*** POLICY LOSS DEBUG: ratio range=[{ratio.min():.6f}, {ratio.max():.6f}], mean={ratio.mean():.6f}")
+    print(f"*** POLICY LOSS DEBUG: ppo_kl={ppo_kl:.6f}")
+
     pg_losses1 = -advantages * ratio
+    print(f"*** POLICY LOSS DEBUG: pg_losses1 range=[{pg_losses1.min():.6f}, {pg_losses1.max():.6f}], mean={pg_losses1.mean():.6f}")
     if cliprange_low is None:
         cliprange_low = cliprange
     if cliprange_high is None:
@@ -352,7 +376,26 @@ def compute_policy_loss(old_log_prob,
         torch.gt(clip_pg_losses2, pg_losses3) * (advantages < 0).float(), response_mask, preserve_grad=preserve_grad)
 
     pg_losses = torch.where(advantages < 0, clip_pg_losses2, clip_pg_losses1)
+    print(f"*** POLICY LOSS DEBUG: final pg_losses range=[{pg_losses.min():.6f}, {pg_losses.max():.6f}], mean={pg_losses.mean():.6f}")
+    
+    # Check if all losses are zero
+    non_zero_losses = (pg_losses != 0).sum()
+    print(f"*** POLICY LOSS DEBUG: non-zero loss count: {non_zero_losses} out of {pg_losses.numel()}")
+    
+    # Apply loss mask and aggregation
+    masked_losses = pg_losses * response_mask
+    print(f"*** POLICY LOSS DEBUG: masked_losses range=[{masked_losses.min():.6f}, {masked_losses.max():.6f}], sum={masked_losses.sum():.6f}")
+    
     pg_loss = agg_loss(loss_mat=pg_losses, loss_mask=response_mask, loss_agg_mode=loss_agg_mode, preserve_grad=preserve_grad)
+    print(f"*** POLICY LOSS DEBUG: FINAL pg_loss={pg_loss:.6f} (mode={loss_agg_mode})")
+    
+    # Final numerical checks
+    if torch.isnan(pg_loss):
+        print("*** POLICY LOSS ERROR: Final policy loss is NaN!")
+    if torch.isinf(pg_loss):
+        print("*** POLICY LOSS ERROR: Final policy loss is Inf!")
+    if pg_loss == 0:
+        print("*** POLICY LOSS WARNING: Final policy loss is exactly zero!")
 
     return pg_loss, pg_clipfrac, ppo_kl, pg_clipfrac_lower
 
