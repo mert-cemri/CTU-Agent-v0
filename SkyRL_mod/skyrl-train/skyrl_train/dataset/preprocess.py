@@ -110,8 +110,15 @@ def convert_prompts_responses_to_batch_tensors(
 
     # initialize ret loss masks to be the same as action mask
     ret_loss_masks = torch.zeros_like(action_mask, dtype=torch.float)
+    print(f"*** PREPROCESS LOSS MASK DEBUG: action_mask shape={action_mask.shape}, sum={action_mask.sum()}")
+    print(f"*** PREPROCESS LOSS MASK DEBUG: Starting with ret_loss_masks sum={ret_loss_masks.sum()}")
     for i, loss_mask in enumerate(loss_masks):
+        if i < 3:  # Debug first 3
+            print(f"*** PREPROCESS LOSS MASK DEBUG: loss_mask[{i}] len={len(loss_mask)}, sum={sum(loss_mask) if loss_mask else 0}, values={loss_mask[:10] if loss_mask else 'EMPTY'}")
         ret_loss_masks[i, : len(loss_mask)] = torch.tensor(loss_mask)
+        if i < 3:  # Debug after assignment
+            print(f"*** PREPROCESS LOSS MASK DEBUG: After assignment[{i}], ret_loss_masks[{i}] sum={ret_loss_masks[i].sum()}")
+    print(f"*** PREPROCESS LOSS MASK DEBUG: Final ret_loss_masks sum={ret_loss_masks.sum()}, shape={ret_loss_masks.shape}")
 
     # do the same for custom rewards
     ret_custom_rewards = torch.zeros_like(action_mask, dtype=torch.float)

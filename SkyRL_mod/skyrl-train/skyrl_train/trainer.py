@@ -896,6 +896,13 @@ class RayPPOTrainer:
         custom_rewards: List[List[float]] = generator_output["rewards"]
         loss_masks: List[List[int]] = generator_output["loss_masks"]
 
+        # === LOSS MASK DEBUG ===
+        print(f"*** LOSS MASK DEBUG: Number of loss_masks: {len(loss_masks)}")
+        for i, mask in enumerate(loss_masks[:5]):  # Show first 5
+            print(f"*** LOSS MASK DEBUG: mask[{i}] length={len(mask)}, sum={sum(mask)}, values={mask[:20] if mask else 'EMPTY'}")
+        total_ones = sum(sum(mask) for mask in loss_masks)
+        print(f"*** LOSS MASK DEBUG: Total ones across all masks: {total_ones}")
+
         (
             sequences_tensor,
             attention_masks_tensor,
