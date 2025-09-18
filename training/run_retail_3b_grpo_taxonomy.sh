@@ -17,7 +17,7 @@ EPOCHS=100
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 # MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v11
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v12
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -47,7 +47,7 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
 # VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=16384
+export VLLM_MAX_MODEL_LEN=18024
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -88,16 +88,16 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=8 \
-  trainer.policy_mini_batch_size=1 \
-  trainer.critic_mini_batch_size=1 \
+  trainer.train_batch_size=16 \
+  trainer.policy_mini_batch_size=2 \
+  trainer.critic_mini_batch_size=2 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.max_prompt_length=14288 \
+  trainer.max_prompt_length=17000 \
   trainer.eval_batch_size=2 \
   trainer.eval_before_train=false \
   trainer.eval_interval=5 \
-  trainer.policy.optimizer_config.lr=3.0e-7 \
+  trainer.policy.optimizer_config.lr=3.0e-6 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \
   trainer.algorithm.use_kl_loss=true \
   trainer.algorithm.kl_loss_coef=0.02 \
@@ -112,14 +112,14 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.use_sample_packing=false \
   trainer.gradient_checkpointing=true \
   trainer.gradient_checkpointing_use_reentrant=false \
-  generator.max_turns=15 \
+  generator.max_turns=16 \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=8 \
   generator.gpu_memory_utilization=0.4 \
-  +generator.max_model_len=16384 \
-  generator.max_input_length=14288 \
+  +generator.max_model_len=18024 \
+  generator.max_input_length=17000 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \
@@ -135,7 +135,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.user_strategy="llm" \
   environment.skyrl_gym.tau_bench.user_model="gpt-4o" \
   environment.skyrl_gym.tau_bench.user_provider="openai" \
-  environment.skyrl_gym.tau_bench.max_turns=10 \
+  environment.skyrl_gym.tau_bench.max_turns=16 \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA="$TAXONOMY_ALPHA" \
