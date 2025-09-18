@@ -5,8 +5,8 @@
 
 # Configuration
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4
+NUM_INFERENCE_ENGINES=6
+TENSOR_PARALLEL_SIZE=1
 EPOCHS=100
 
 # Model Configuration
@@ -17,7 +17,7 @@ EPOCHS=100
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
 # MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_after_sft_v3
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v12
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_taxonomy_v13
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -88,14 +88,14 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=16 \
-  trainer.policy_mini_batch_size=2 \
-  trainer.critic_mini_batch_size=2 \
-  trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.train_batch_size=32 \
+  trainer.policy_mini_batch_size=4 \
+  trainer.critic_mini_batch_size=4 \
+  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=2 \
   trainer.max_prompt_length=17000 \
-  trainer.eval_batch_size=2 \
-  trainer.eval_before_train=false \
+  trainer.eval_batch_size=8 \
+  trainer.eval_before_train=true \
   trainer.eval_interval=5 \
   trainer.policy.optimizer_config.lr=3.0e-6 \
   trainer.policy.optimizer_config.num_warmup_steps=200 \

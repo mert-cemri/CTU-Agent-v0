@@ -5,14 +5,14 @@
 
 # Configuration for 7B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4  # Use 4 GPUs per engine for 7B model
+NUM_INFERENCE_ENGINES=6
+TENSOR_PARALLEL_SIZE=1  # Use 4 GPUs per engine for 7B model
 EPOCHS=100
 
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen2.5-7B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_v13
 
 # Data Configuration - Using retail domain only
 DATA_DIR="data/tau_bench_retail"
@@ -76,11 +76,11 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=32 \
+  trainer.train_batch_size=64 \
   trainer.policy_mini_batch_size=8 \
   trainer.critic_mini_batch_size=8 \
-  trainer.micro_train_batch_size_per_gpu=1 \
-  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.micro_forward_batch_size_per_gpu=2 \
   trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=16 \
   trainer.eval_before_train=true \
@@ -109,8 +109,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=3 \
-  generator.gpu_memory_utilization=0.75 \
+  generator.n_samples_per_prompt=8 \
+  generator.gpu_memory_utilization=0.4 \
   generator.max_input_length=16384 \
   generator.max_num_batched_tokens=16384 \
   generator.enforce_eager=true \
