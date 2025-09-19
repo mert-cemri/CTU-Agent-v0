@@ -5,7 +5,7 @@
 
 # Configuration for 7B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=6
+NUM_INFERENCE_ENGINES=8
 TENSOR_PARALLEL_SIZE=1  # Use 4 GPUs per engine for 7B model
 EPOCHS=100
 
