@@ -21,18 +21,14 @@ from skyrl_train.inference_engines.base import (
 from skyrl_train.utils import str_to_torch_dtype
 
 
-def force_local_files_only_for_hf_models():
+def setup_vllm_environment():
     """
-    Set environment variables to force Hugging Face to use local files only.
-    This prevents downloading from HuggingFace when models are cached locally.
+    Set environment variables for VLLM compatibility and stability.
     """
-    # Force HuggingFace to work offline (use local cache only)
-    os.environ["HF_HUB_OFFLINE"] = "1"
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    # Additional environment variables for VLLM offline mode
-    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
-    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
-    print("🔒 Forced HuggingFace to use local cache only (offline mode)")
+    # Fix for VLLM v0.10.0 memory pool issue with PyTorch expandable segments
+    # See: https://github.com/pytorch/pytorch/issues/147851
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:False"
+    print("🔧 Set PYTORCH_CUDA_ALLOC_CONF=expandable_segments:False for VLLM compatibility")
 
 
 def resolve_model_path_to_local_cache(model_path: str) -> str:
@@ -299,20 +295,23 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
     """Synchronous VLLM engine."""
 
     def _create_engine(self, *args, **kwargs):
+        # Setup VLLM environment for compatibility
+        setup_vllm_environment()
+        
         # Resolve model path to local cache if available (this prevents 429 errors)
         if args and len(args) > 0:
             # First argument is typically the model path
             original_model_path = args[0]
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
             if resolved_model_path != original_model_path:
-                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                print(f"🔄 Using local model directory: {resolved_model_path}")
                 args = (resolved_model_path,) + args[1:]
         elif 'model' in kwargs:
             # Model path might be in kwargs
             original_model_path = kwargs['model']
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
             if resolved_model_path != original_model_path:
-                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                print(f"🔄 Using local model directory: {resolved_model_path}")
                 kwargs['model'] = resolved_model_path
         
         return vllm.LLM(*args, **kwargs)
@@ -421,20 +420,23 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
     def _create_engine(self, *args, **kwargs):
         # TODO (erictang000): potentially enable log requests for a debugging mode
         
+        # Setup VLLM environment for compatibility
+        setup_vllm_environment()
+        
         # Resolve model path to local cache if available (this prevents 429 errors)
         if args and len(args) > 0:
             # First argument is typically the model path
             original_model_path = args[0]
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
             if resolved_model_path != original_model_path:
-                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                print(f"🔄 Using local model directory: {resolved_model_path}")
                 args = (resolved_model_path,) + args[1:]
         elif 'model' in kwargs:
             # Model path might be in kwargs
             original_model_path = kwargs['model']
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
             if resolved_model_path != original_model_path:
-                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                print(f"🔄 Using local model directory: {resolved_model_path}")
                 kwargs['model'] = resolved_model_path
         
         engine_args = vllm.AsyncEngineArgs(disable_log_requests=True, **kwargs)
