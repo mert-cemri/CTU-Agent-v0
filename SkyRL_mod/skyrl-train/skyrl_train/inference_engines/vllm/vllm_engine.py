@@ -36,10 +36,10 @@ def resolve_model_path_to_local_cache(model_path: str) -> str:
     """
     Resolve a Hugging Face model identifier to local cache path if it exists.
     This prevents downloading from HuggingFace when the model is already cached locally.
-
+    
     Args:
         model_path: Original model path (e.g., "Qwen/Qwen2.5-7B-Instruct")
-
+    
     Returns:
         Local cache path if exists, otherwise original path
     """
@@ -47,23 +47,45 @@ def resolve_model_path_to_local_cache(model_path: str) -> str:
         # Convert HF model identifier to cache path format
         # "Qwen/Qwen2.5-7B-Instruct" -> "models--Qwen--Qwen2.5-7B-Instruct"
         cache_name = "models--" + model_path.replace("/", "--")
-
+        
         # Check common cache locations
         cache_locations = [
             os.path.expanduser("~/.cache/huggingface/hub"),
             os.path.expanduser("~/.cache/huggingface/transformers"),
             "/root/.cache/huggingface/hub",  # Common in Docker containers
         ]
-
+        
         for cache_dir in cache_locations:
-            local_path = os.path.join(cache_dir, cache_name)
-            if os.path.exists(local_path):
-                print(f"✅ Using local cached model: {local_path}")
-                return local_path
-
+            cache_model_dir = os.path.join(cache_dir, cache_name)
+            if os.path.exists(cache_model_dir):
+                # Look for the actual model directory within the cache
+                # HuggingFace cache structure: models--org--model/snapshots/hash/
+                snapshots_dir = os.path.join(cache_model_dir, "snapshots")
+                if os.path.exists(snapshots_dir):
+                    # Find the snapshot directories (usually there's only one)
+                    try:
+                        snapshot_dirs = [d for d in os.listdir(snapshots_dir)
+                                       if os.path.isdir(os.path.join(snapshots_dir, d))]
+                        if snapshot_dirs:
+                            # Use the first (and usually only) snapshot
+                            snapshot_path = os.path.join(snapshots_dir, snapshot_dirs[0])
+                            # Verify it has config.json
+                            config_path = os.path.join(snapshot_path, "config.json")
+                            if os.path.exists(config_path):
+                                print(f"✅ Using local cached model: {snapshot_path}")
+                                return snapshot_path
+                    except (OSError, PermissionError) as e:
+                        print(f"⚠️  Error accessing snapshots directory: {e}")
+                
+                # Fallback: check if config.json is directly in the cache directory
+                config_path = os.path.join(cache_model_dir, "config.json")
+                if os.path.exists(config_path):
+                    print(f"✅ Using local cached model: {cache_model_dir}")
+                    return cache_model_dir
+        
         print(f"⚠️  Local cache not found for {model_path}, but offline mode is enabled")
-        print(f"    Expected cache location: ~/.cache/huggingface/hub/{cache_name}")
-
+        print(f"    Expected cache location: ~/.cache/huggingface/hub/{cache_name}/snapshots/*/")
+    
     return model_path
 
 
