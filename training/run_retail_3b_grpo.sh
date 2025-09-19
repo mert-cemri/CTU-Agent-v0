@@ -5,7 +5,7 @@
 
 # Configuration
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=6
+NUM_INFERENCE_ENGINES=8  # Must match NUM_GPUS for colocated models
 TENSOR_PARALLEL_SIZE=1
 EPOCHS=100
 
