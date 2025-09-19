@@ -383,8 +383,14 @@ class PolicyLoss(nn.Module):
         print(f"*** SKYRL POLICY LOSS DEBUG: Input shapes - log_probs={log_probs.shape}, old_log_probs={old_log_probs.shape}")
         print(f"*** SKYRL POLICY LOSS DEBUG: advantages shape={advantages.shape}, loss_mask={loss_mask.shape if loss_mask is not None else None}")
         print(f"*** SKYRL POLICY LOSS DEBUG: advantages range=[{advantages.min():.6f}, {advantages.max():.6f}], mean={advantages.mean():.6f}")
+        print(f"*** SKYRL POLICY LOSS DEBUG: advantages non-zero count={(advantages != 0).sum()}, total={advantages.numel()}")
+        # Show first few advantage values
+        print(f"*** SKYRL POLICY LOSS DEBUG: First 10 advantages: {advantages.flatten()[:10].tolist()}")
         if loss_mask is not None:
             print(f"*** SKYRL POLICY LOSS DEBUG: loss_mask sum={loss_mask.sum():.0f}, non_zero_pct={100*(loss_mask > 0).float().mean():.1f}%")
+            # Check if advantages are zero where loss_mask is 1
+            masked_advantages = advantages * loss_mask
+            print(f"*** SKYRL POLICY LOSS DEBUG: Masked advantages range=[{masked_advantages.min():.6f}, {masked_advantages.max():.6f}], non-zero={(masked_advantages != 0).sum()}")
         
         # Check for numerical issues in inputs
         if torch.isnan(advantages).any():
