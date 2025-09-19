@@ -29,6 +29,9 @@ def force_local_files_only_for_hf_models():
     # Force HuggingFace to work offline (use local cache only)
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    # Additional environment variables for VLLM offline mode
+    os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+    os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
     print("🔒 Forced HuggingFace to use local cache only (offline mode)")
 
 
@@ -296,20 +299,22 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
     """Synchronous VLLM engine."""
 
     def _create_engine(self, *args, **kwargs):
-        # Force HuggingFace to use local files only to prevent 429 errors
-        force_local_files_only_for_hf_models()
-
-        # Resolve model path to local cache if available
+        # Resolve model path to local cache if available (this prevents 429 errors)
         if args and len(args) > 0:
             # First argument is typically the model path
             original_model_path = args[0]
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
-            args = (resolved_model_path,) + args[1:]
+            if resolved_model_path != original_model_path:
+                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                args = (resolved_model_path,) + args[1:]
         elif 'model' in kwargs:
             # Model path might be in kwargs
             original_model_path = kwargs['model']
-            kwargs['model'] = resolve_model_path_to_local_cache(original_model_path)
-
+            resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
+            if resolved_model_path != original_model_path:
+                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                kwargs['model'] = resolved_model_path
+        
         return vllm.LLM(*args, **kwargs)
 
     async def generate(self, input_batch: InferenceEngineInput) -> InferenceEngineOutput:
@@ -415,21 +420,23 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
 
     def _create_engine(self, *args, **kwargs):
         # TODO (erictang000): potentially enable log requests for a debugging mode
-
-        # Force HuggingFace to use local files only to prevent 429 errors
-        force_local_files_only_for_hf_models()
-
-        # Resolve model path to local cache if available
+        
+        # Resolve model path to local cache if available (this prevents 429 errors)
         if args and len(args) > 0:
             # First argument is typically the model path
             original_model_path = args[0]
             resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
-            args = (resolved_model_path,) + args[1:]
+            if resolved_model_path != original_model_path:
+                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                args = (resolved_model_path,) + args[1:]
         elif 'model' in kwargs:
             # Model path might be in kwargs
             original_model_path = kwargs['model']
-            kwargs['model'] = resolve_model_path_to_local_cache(original_model_path)
-
+            resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
+            if resolved_model_path != original_model_path:
+                print(f"🔄 Redirecting model path from {original_model_path} to local cache")
+                kwargs['model'] = resolved_model_path
+        
         engine_args = vllm.AsyncEngineArgs(disable_log_requests=True, **kwargs)
         return vllm.AsyncLLMEngine.from_engine_args(engine_args)
 
