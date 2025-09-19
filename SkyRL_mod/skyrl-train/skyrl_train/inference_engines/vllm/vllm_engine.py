@@ -11,6 +11,7 @@ from skyrl_train.distributed.utils import init_custom_process_group
 from uuid import uuid4
 import warnings
 from packaging.version import Version
+from pathlib import Path
 from skyrl_train.inference_engines.base import (
     InferenceEngineInterface,
     InferenceEngineInput,
@@ -18,6 +19,52 @@ from skyrl_train.inference_engines.base import (
     NamedWeightUpdateRequest,
 )
 from skyrl_train.utils import str_to_torch_dtype
+
+
+def force_local_files_only_for_hf_models():
+    """
+    Set environment variables to force Hugging Face to use local files only.
+    This prevents downloading from HuggingFace when models are cached locally.
+    """
+    # Force HuggingFace to work offline (use local cache only)
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    print("🔒 Forced HuggingFace to use local cache only (offline mode)")
+
+
+def resolve_model_path_to_local_cache(model_path: str) -> str:
+    """
+    Resolve a Hugging Face model identifier to local cache path if it exists.
+    This prevents downloading from HuggingFace when the model is already cached locally.
+
+    Args:
+        model_path: Original model path (e.g., "Qwen/Qwen2.5-7B-Instruct")
+
+    Returns:
+        Local cache path if exists, otherwise original path
+    """
+    if "/" in model_path and not os.path.exists(model_path):
+        # Convert HF model identifier to cache path format
+        # "Qwen/Qwen2.5-7B-Instruct" -> "models--Qwen--Qwen2.5-7B-Instruct"
+        cache_name = "models--" + model_path.replace("/", "--")
+
+        # Check common cache locations
+        cache_locations = [
+            os.path.expanduser("~/.cache/huggingface/hub"),
+            os.path.expanduser("~/.cache/huggingface/transformers"),
+            "/root/.cache/huggingface/hub",  # Common in Docker containers
+        ]
+
+        for cache_dir in cache_locations:
+            local_path = os.path.join(cache_dir, cache_name)
+            if os.path.exists(local_path):
+                print(f"✅ Using local cached model: {local_path}")
+                return local_path
+
+        print(f"⚠️  Local cache not found for {model_path}, but offline mode is enabled")
+        print(f"    Expected cache location: ~/.cache/huggingface/hub/{cache_name}")
+
+    return model_path
 
 
 def setup_envvars_for_vllm(kwargs, bundle_indices):
@@ -227,6 +274,20 @@ class VLLMInferenceEngine(BaseVLLMInferenceEngine):
     """Synchronous VLLM engine."""
 
     def _create_engine(self, *args, **kwargs):
+        # Force HuggingFace to use local files only to prevent 429 errors
+        force_local_files_only_for_hf_models()
+
+        # Resolve model path to local cache if available
+        if args and len(args) > 0:
+            # First argument is typically the model path
+            original_model_path = args[0]
+            resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
+            args = (resolved_model_path,) + args[1:]
+        elif 'model' in kwargs:
+            # Model path might be in kwargs
+            original_model_path = kwargs['model']
+            kwargs['model'] = resolve_model_path_to_local_cache(original_model_path)
+
         return vllm.LLM(*args, **kwargs)
 
     async def generate(self, input_batch: InferenceEngineInput) -> InferenceEngineOutput:
@@ -332,6 +393,21 @@ class AsyncVLLMInferenceEngine(BaseVLLMInferenceEngine):
 
     def _create_engine(self, *args, **kwargs):
         # TODO (erictang000): potentially enable log requests for a debugging mode
+
+        # Force HuggingFace to use local files only to prevent 429 errors
+        force_local_files_only_for_hf_models()
+
+        # Resolve model path to local cache if available
+        if args and len(args) > 0:
+            # First argument is typically the model path
+            original_model_path = args[0]
+            resolved_model_path = resolve_model_path_to_local_cache(original_model_path)
+            args = (resolved_model_path,) + args[1:]
+        elif 'model' in kwargs:
+            # Model path might be in kwargs
+            original_model_path = kwargs['model']
+            kwargs['model'] = resolve_model_path_to_local_cache(original_model_path)
+
         engine_args = vllm.AsyncEngineArgs(disable_log_requests=True, **kwargs)
         return vllm.AsyncLLMEngine.from_engine_args(engine_args)
 
