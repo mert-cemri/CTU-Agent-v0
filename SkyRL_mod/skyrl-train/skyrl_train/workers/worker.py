@@ -812,6 +812,16 @@ class PolicyWorkerBase(Worker):
         num_actions = experience.num_actions
         attention_mask = experience.attention_mask
         loss_mask = experience.loss_mask
+        
+        # === EXPERIENCE ADVANTAGES DEBUG ===
+        print(f"*** EXPERIENCE DEBUG: advantages shape={advantages.shape if advantages is not None else None}")
+        if advantages is not None:
+            print(f"*** EXPERIENCE DEBUG: advantages range=[{advantages.min():.6f}, {advantages.max():.6f}], mean={advantages.mean():.6f}")
+            print(f"*** EXPERIENCE DEBUG: advantages non-zero count={(advantages != 0).sum()}, total={advantages.numel()}")
+            print(f"*** EXPERIENCE DEBUG: First 20 advantages: {advantages.flatten()[:20].tolist()}")
+        print(f"*** EXPERIENCE DEBUG: loss_mask shape={loss_mask.shape if loss_mask is not None else None}")
+        if loss_mask is not None:
+            print(f"*** EXPERIENCE DEBUG: loss_mask sum={loss_mask.sum()}, non-zero%={(loss_mask > 0).float().mean()*100:.1f}%")
 
         # TODO (sumanthrh): don't think this does anything for deepspeed or fsdp rn because autocast happens internally
         with torch.autocast(dtype=torch.bfloat16, device_type="cuda"):
