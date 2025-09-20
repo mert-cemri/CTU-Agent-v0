@@ -5,8 +5,8 @@
 
 # Configuration for 7B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=8
-TENSOR_PARALLEL_SIZE=1
+NUM_INFERENCE_ENGINES=2
+TENSOR_PARALLEL_SIZE=4
 EPOCHS=100
 
 # Model Configuration
@@ -115,10 +115,10 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.use_conversation_multi_turn=true \
   generator.batched=false \
   generator.async_engine=true \
-  generator.n_samples_per_prompt=8 \
-  generator.gpu_memory_utilization=0.4 \
+  generator.n_samples_per_prompt=4 \
+  generator.gpu_memory_utilization=0.35 \
   generator.max_input_length=16384 \
-  generator.max_num_batched_tokens=16384 \
+  generator.max_num_batched_tokens=12288 \
   generator.enforce_eager=true \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
