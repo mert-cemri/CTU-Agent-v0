@@ -5,8 +5,8 @@
 
 # Configuration for 7B model
 NUM_GPUS=8
-NUM_INFERENCE_ENGINES=8
-TENSOR_PARALLEL_SIZE=1  # Use 4 GPUs per engine for 7B model
+NUM_INFERENCE_ENGINES=2
+TENSOR_PARALLEL_SIZE=4  # Use 4 GPUs per engine for 7B model
 EPOCHS=100
 
 # Model Configuration
@@ -83,7 +83,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=16384 \
   trainer.eval_batch_size=32 \
-  trainer.eval_before_train=false \
+  trainer.eval_before_train=true \
   trainer.eval_interval=10 \
   trainer.policy.optimizer_config.lr=2.0e-7 \
   trainer.policy.optimizer_config.num_warmup_steps=100 \
@@ -110,9 +110,9 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.batched=false \
   generator.async_engine=true \
   generator.n_samples_per_prompt=4 \
-  generator.gpu_memory_utilization=0.4 \
+  generator.gpu_memory_utilization=0.35 \
   generator.max_input_length=16384 \
-  generator.max_num_batched_tokens=16384 \
+  generator.max_num_batched_tokens=12288 \
   generator.enforce_eager=true \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
