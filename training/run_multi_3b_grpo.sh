@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# GRPO Training on Retail Domain - 3B Model (Vanilla)
-# This script trains Qwen2.5-3B-Instruct on retail domain only using standard GRPO
+# GRPO Training on multi Domain - 3B Model (Vanilla)
+# This script trains Qwen2.5-3B-Instruct on multi domain only using standard GRPO
 
 # Configuration
 NUM_GPUS=8
@@ -14,10 +14,10 @@ EPOCHS=100
 # POLICY_MODEL="mcemri/qwen2.5_3b_alldata_sft_v0"  # e.g., "/root/ckpts/your_sft_model" or "mcemri/qwen2.5_3b_alldata_sft_v0"
 POLICY_MODEL="Qwen/Qwen2.5-3B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-3B-Instruct"  # Keep vanilla model as reference for KL regularization
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_v15 #v13 vs 13-gpu0 are good
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_multi_grpo_vanilla_v15 #v13 vs 13-gpu0 are good
 
-# Data Configuration - Using retail domain only
-DATA_DIR="data/tau_bench_retail"
+# Data Configuration - Using multi domain only
+DATA_DIR="data/tau_bench_multi"
 
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
@@ -25,7 +25,7 @@ CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 # Make sure required directories exist with unique run names
 RUN_TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_${RUN_TIMESTAMP}"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -61,12 +61,12 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 ray stop || true
 
 echo "========================================="
-echo "Starting 3B GRPO Training (Vanilla) on Retail Domain"
+echo "Starting 3B GRPO Training (Vanilla) on multi Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
-echo "Domain: Retail only"
+echo "Domain: multi only"
 echo "Taxonomy Feedback: DISABLED"
-echo "WandB Project: tau_bench_retail_grpo"
+echo "WandB Project: tau_bench_multi_grpo"
 echo "Conservative memory settings enabled"
 echo ""
 
@@ -83,11 +83,11 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.resume_path=null \
   trainer.export_path="$EXPORT_DIR" \
   trainer.epochs=$EPOCHS \
-  trainer.train_batch_size=32 \
-  trainer.policy_mini_batch_size=4 \
-  trainer.critic_mini_batch_size=4 \
-  trainer.micro_train_batch_size_per_gpu=2 \
-  trainer.micro_forward_batch_size_per_gpu=2 \
+  trainer.train_batch_size=16 \
+  trainer.policy_mini_batch_size=2 \
+  trainer.critic_mini_batch_size=2 \
+  trainer.micro_train_batch_size_per_gpu=1 \
+  trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.max_prompt_length=20000 \
   trainer.eval_batch_size=8 \
   trainer.eval_before_train=true \
@@ -116,7 +116,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   +generator.max_model_len=22000 \
   generator.max_input_length=20000 \
   generator.enforce_eager=true \
-  generator.sampling_params.max_generate_length=800 \
+  generator.sampling_params.max_generate_length=1024 \
   generator.sampling_params.temperature=0.9 \
   generator.sampling_params.top_p=1 \
   +generator.sampling_params.repetition_penalty=1.05 \
@@ -136,8 +136,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
   environment.skyrl_gym.max_env_workers=4 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo" \
-  trainer.run_name="retail_3b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_multi_grpo" \
+  trainer.run_name="multi_3b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
