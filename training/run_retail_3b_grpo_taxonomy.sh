@@ -47,7 +47,7 @@ export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for judge rewards
 
 # VLLM settings for longer tau_bench conversations
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
-export VLLM_MAX_MODEL_LEN=18024
+export VLLM_MAX_MODEL_LEN=22000
 export RAY_RUNTIME_ENV_HOOK=ray._private.runtime_env.uv_runtime_env_hook.hook
 
 # Training command
@@ -118,7 +118,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.async_engine=true \
   generator.n_samples_per_prompt=8 \
   generator.gpu_memory_utilization=0.4 \
-  +generator.max_model_len=18024 \
+  +generator.max_model_len=22000 \
   generator.max_input_length=17000 \
   generator.enforce_eager=true \
   generator.sampling_params.max_generate_length=1024 \
