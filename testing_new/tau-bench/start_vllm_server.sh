@@ -13,6 +13,19 @@ GPU_ID="${5:-0}"  # Default to GPU 0
 # bash start_vllm_server.sh mcemri/qwen2.5_3b_alldata_sft_v0-step40-v0 8001 65536 0.9 7
 # bash start_vllm_server.sh Qwen/Qwen3-8B 8001 65536 0.9 6
 # bash start_vllm_server.sh Qwen/Qwen3-4B-Instruct-2507 8002 65536 0.9 7
+# bash start_vllm_server.sh mcemri/qwen2.5-3b-rl-cut-agent-grpo-taxonomy-step80-pure 8000 65536 0.9 0
+# python test.py --mode vllm     --model mcemri/qwen2.5-3b-rl-cut-agent-grpo-taxonomy-step80-pure    --base-url http://localhost:8000/v1     --env airline     --max-concurrency 2     --output-dir testing_results/qwen25_3b_grpo_taxonomy_v0_airline
+# python test.py --mode vllm     --model mcemri/qwen2.5-3b-rl-cut-agent-grpo-taxonomy-step80-pure    --base-url http://localhost:8000/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_3b_grpo_taxonomy_v0_retail
+
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-step100-v0    --base-url http://localhost:8000/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-step100_retail
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step100-v0    --base-url http://localhost:8001/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-taxonomy-step100_retail
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-step20-v0    --base-url http://localhost:8002/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-step20_retail
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step200-v0    --base-url http://localhost:8003/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-taxonomy-step200_retail
+
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-step100-v0 8000 65536 0.9 0
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step100-v0 8001 65536 0.9 1
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-step20-v0 8002 65536 0.9 2
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step200-v0 8003 65536 0.9 3
 
 echo "=================================================="
 echo "         Starting VLLM Server"
