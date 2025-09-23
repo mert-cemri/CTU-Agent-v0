@@ -1,29 +1,29 @@
 #!/bin/bash
 
-# GRPO Training on Retail Domain - 7B Model (Vanilla)
-# This script trains Qwen2.5-7B-Instruct on retail domain only using standard GRPO
+# GRPO + Taxonomy Feedback Training on multi Domain - 7B Model
+# This script trains Qwen2.5-7B-Instruct on multi domain with LLM Judge feedback
 
 # Configuration for 7B model
 NUM_GPUS=8
 NUM_INFERENCE_ENGINES=2
-TENSOR_PARALLEL_SIZE=4  # Use 4 GPUs per engine for 7B model
+TENSOR_PARALLEL_SIZE=4
 EPOCHS=100
 
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen2.5-7B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_v13
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_multi_grpo_taxonomy_v13
 
-# Data Configuration - Using retail domain only
-DATA_DIR="data/tau_bench_retail"
+# Data Configuration - Using multi domain only
+DATA_DIR="data/tau_bench_multi"
 
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_7b_${RUN_TIMESTAMP}"
-
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_7b_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi"
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -36,9 +36,9 @@ export WANDB_API_KEY=${WANDB_API_KEY:-"your_wandb_api_key"}
 export OPENAI_API_KEY=${OPENAI_API_KEY:-"your_openai_api_key"}
 export DEBUG_PARSER=0
 
-# Explicitly disable taxonomy feedback
-export TAXONOMY_FEEDBACK="false"
-export TAXONOMY_ALPHA="0.0"
+# Enable taxonomy feedback with configurable alpha
+export TAXONOMY_FEEDBACK="true"
+export TAXONOMY_ALPHA=${TAXONOMY_ALPHA:-"0.5"}  # Weight for 7B model
 
 # Enable VLLM settings (reduced for 7B model)
 export VLLM_ALLOW_LONG_MAX_MODEL_LEN=1
@@ -55,14 +55,20 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 ray stop || true
 
 echo "========================================="
-echo "Starting 7B GRPO Training (Vanilla) on Retail Domain"
+echo "Starting 7B GRPO + Taxonomy Training on multi Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
-echo "Domain: Retail only"
-echo "Taxonomy Feedback: DISABLED"
-echo "WandB Project: tau_bench_retail_grpo_7b"
+echo "Domain: multi only"
+echo "Taxonomy Feedback: ENABLED (alpha=$TAXONOMY_ALPHA)"
+echo "WandB Project: tau_bench_multi_grpo_7b_with_taxonomy_feedback"
 echo "Memory Optimized: YES"
 echo ""
+
+# Verify OpenAI key is set
+if [ "$OPENAI_API_KEY" = "your_openai_api_key" ]; then
+    echo "WARNING: OPENAI_API_KEY not set. LLM Judge will not work!"
+    echo "Please set: export OPENAI_API_KEY=your_actual_key"
+fi
 
 HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   trainer.policy.model.path="$POLICY_MODEL" \
@@ -128,17 +134,18 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.user_provider="openai" \
   environment.skyrl_gym.tau_bench.max_turns=10 \
   environment.skyrl_gym.tau_bench.use_native_tool_calling=true \
-  environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=false \
-  environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
+  environment.skyrl_gym.tau_bench.TAXONOMY_FEEDBACK=true \
+  environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA="$TAXONOMY_ALPHA" \
   environment.skyrl_gym.max_env_workers=8 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo_7b" \
-  trainer.run_name="retail_7b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_multi_grpo_7b" \
+  trainer.run_name="multi_7b_grpo_taxonomy_alpha${TAXONOMY_ALPHA}_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
-  $@
+ 
 
 echo "Training completed!"
 echo "Checkpoints saved to: $CKPT_DIR"
 echo "Exports saved to: $EXPORT_DIR"
+echo "Taxonomy alpha: $TAXONOMY_ALPHA"

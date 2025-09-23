@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# GRPO Training on Retail Domain - 7B Model (Vanilla)
-# This script trains Qwen2.5-7B-Instruct on retail domain only using standard GRPO
+# GRPO Training on multi Domain - 7B Model (Vanilla)
+# This script trains Qwen2.5-7B-Instruct on multi domain only using standard GRPO
 
 # Configuration for 7B model
 NUM_GPUS=8
@@ -12,17 +12,17 @@ EPOCHS=100
 # Model Configuration
 POLICY_MODEL="Qwen/Qwen2.5-7B-Instruct"
 REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_retail_grpo_vanilla_v13
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_multi_grpo_vanilla_v13
 
-# Data Configuration - Using retail domain only
-DATA_DIR="data/tau_bench_retail"
+# Data Configuration - Using multi domain only
+DATA_DIR="data/tau_bench_multi"
 
 # Get the CTU-Agent-v0 root directory
 CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_retail_7b_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_7b_${RUN_TIMESTAMP}"
 
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
@@ -55,12 +55,12 @@ export PYTHONPATH="${PYTHONPATH}:$(pwd)/../SkyRL_mod/skyrl-train:$(pwd)/../SkyRL
 ray stop || true
 
 echo "========================================="
-echo "Starting 7B GRPO Training (Vanilla) on Retail Domain"
+echo "Starting 7B GRPO Training (Vanilla) on multi Domain"
 echo "========================================="
 echo "Model: $POLICY_MODEL"
-echo "Domain: Retail only"
+echo "Domain: multi only"
 echo "Taxonomy Feedback: DISABLED"
-echo "WandB Project: tau_bench_retail_grpo_7b"
+echo "WandB Project: tau_bench_multi_grpo_7b"
 echo "Memory Optimized: YES"
 echo ""
 
@@ -132,8 +132,8 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   environment.skyrl_gym.tau_bench.TAXONOMY_ALPHA=0.0 \
   environment.skyrl_gym.max_env_workers=8 \
   trainer.logger="wandb" \
-  trainer.project_name="tau_bench_retail_grpo_7b" \
-  trainer.run_name="retail_7b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
+  trainer.project_name="tau_bench_multi_grpo_7b" \
+  trainer.run_name="multi_7b_grpo_vanilla_$(date +%Y%m%d_%H%M%S)" \
   trainer.resume_mode=latest \
   data.train_data="['$DATA_DIR/train.parquet']" \
   data.val_data="['$DATA_DIR/validation.parquet']" \
