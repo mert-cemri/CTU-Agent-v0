@@ -104,9 +104,13 @@ class TauBenchLLMJudge:
             
             # Get LLM judge evaluation
             evaluation = self.judge.evaluate_trace(trace)
+            failure_modes = evaluation["failure_modes"]
+            failure_modes_list = list(failure_modes.values())
+            failure_modes_list_category2 = failure_modes_list[5:12]
+            total_failures = sum(failure_modes_list_category2)
             
             # Calculate reward bonus: 1/total_failures (with safety checks)
-            total_failures = evaluation.get('total_failures', 14)  # Default to max failures
+            # total_failures = evaluation.get('total_failures', 14)  # Default to max failures
             
             # Reward calculation: higher bonus for fewer failures, weighted by alpha
             if total_failures == 0:
