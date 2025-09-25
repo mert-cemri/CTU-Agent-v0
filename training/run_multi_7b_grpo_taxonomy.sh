@@ -10,9 +10,9 @@ TENSOR_PARALLEL_SIZE=4
 EPOCHS=100
 
 # Model Configuration
-POLICY_MODEL="Qwen/Qwen2.5-7B-Instruct"
+POLICY_MODEL="mcemri/qwen2.5-7b-sft-v1"
 REF_MODEL="Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_multi_grpo_taxonomy_v13
+MODEL_NAME_SANITIZED=$(echo $POLICY_MODEL | tr '/' '_')_multi_grpo_taxonomy_on_sft_v1
 
 # Data Configuration - Using multi domain only
 DATA_DIR="data/tau_bench_multi"
@@ -22,8 +22,8 @@ CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_7b_${RUN_TIMESTAMP}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi"
+EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_7b_taxonomy_on_sft_${RUN_TIMESTAMP}"
+
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
     mkdir -p $CKPT_DIR
@@ -123,7 +123,7 @@ HYDRA_FULL_ERROR=1 python main_tau_bench.py \
   generator.enforce_eager=true \
   generator.enable_prefix_caching=false \
   generator.enable_chunked_prefill=false \
-  generator.sampling_params.max_generate_length=512 \
+  generator.sampling_params.max_generate_length=768 \
   generator.sampling_params.temperature=0.8 \
   generator.sampling_params.top_p=0.9 \
   generator.override_existing_update_group="force_new" \
