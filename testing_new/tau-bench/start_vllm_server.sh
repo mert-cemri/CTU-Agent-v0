@@ -20,16 +20,33 @@ GPU_ID="${5:-0}"  # Default to GPU 0
 # python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-step100-v0    --base-url http://localhost:8000/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-step100_retail
 # python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step100-v0    --base-url http://localhost:8001/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-taxonomy-step100_retail
 # python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-step20-v0    --base-url http://localhost:8002/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-step20_retail
+<<<<<<< HEAD
 # python test.py --mode vllm     --model /mnt/task_runtime/CTU-Agent-v0/exports/tau_bench_retail_taxonomy_20250923_053722/global_step_100/policy    --base-url http://localhost:8003/v1     --env airline     --max-concurrency 2     --output-dir testing_results/qwen25_3b-rl-cut-agent-grpo-taxonomy-overlong_filtered_airline
+=======
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step200-v0    --base-url http://localhost:8003/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen25_7b-rl-cut-agent-grpo-taxonomy-step200_retail
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-multi-domain-rl-grpo-taxonomy-fil-v0    --base-url http://localhost:8004/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen2.5-7b-multi-domain-rl-grpo-taxonomy-fil-v0_retail
+# python test.py --mode vllm     --model mcemri/qwen2.5-7b-sft-v1   --base-url http://localhost:8003/v1     --env retail     --max-concurrency 2     --output-dir testing_results/qwen2.5-7b-sft-v1_retail
+# python test.py --mode vllm     --model Qwen/Qwen2.5-3B-Instruct  --base-url http://localhost:8005/v1     --env airline     --max-concurrency 2     --output-dir testing_results/qwen2.5-3b-instruct-v1_airline
+# python test.py --mode vllm     --model  mcemri/ mcemri/qwen2.5-3b-rl-cut-agent-grpo-pure-step80-v0  --base-url http://localhost:8005/v1     --env airline     --max-concurrency 2     --output-dir testing_results/ mcemri/qwen2.5-3b-rl-cut-agent-grpo-pure-step80-v0_airline
+
+>>>>>>> 5b0f1ad52538bd18831e4940956785f2fe347e14
 
 # bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-step100-v0 8000 65536 0.9 0
 # bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step100-v0 8001 65536 0.9 1
 # bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-step20-v0 8002 65536 0.9 2
+<<<<<<< HEAD
 # bash start_vllm_server.sh mcemri/qwen2.5-7b-rl-cut-agent-grpo-taxonomy-step200-v0 8004 65536 0.9 4
 
 # bash start_vllm_server.sh /mnt/task_runtime/CTU-Agent-v0/exports/tau_bench_retail_taxonomy_20250923_053722/global_step_100/policy  8003 65536 0.9 3
 # bash start_vllm_server.sh /mnt/task_runtime/CTU-Agent-v0/exports/tau_bench_retail_taxonomy_20250923_053722/global_step_100/policy  8004 32768 0.9 4
 
+=======
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-sft-v1 8003 32768 0.9 3
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-multi-domain-rl-grpo-taxonomy-fil-v0 8004 32768 0.9 4
+# bash start_vllm_server.sh Qwen/Qwen2.5-3B-Instruct 8005 32768 0.9 5
+# bash start_vllm_server.sh mcemri/qwen2.5-7b-sft-multi-domain-rl-grpo-taxonomy-step20-v0 8007 32768 0.9 7
+# bash start_vllm_server.sh mcemri/qwen2.5-3b-rl-cut-agent-grpo-pure-step80-v0 8005 32768 0.9 5
+>>>>>>> 5b0f1ad52538bd18831e4940956785f2fe347e14
 echo "=================================================="
 echo "         Starting VLLM Server"
 echo "=================================================="
