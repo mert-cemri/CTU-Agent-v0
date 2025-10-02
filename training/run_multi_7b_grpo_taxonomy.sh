@@ -22,7 +22,7 @@ CTU_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 
 # Make sure required directories exist
 CKPT_DIR="$CTU_ROOT/checkpoints/tau_bench/${MODEL_NAME_SANITIZED}"
-EXPORT_DIR="$CTU_ROOT/exports/tau_bench_multi_7b_taxonomy_on_sft_${RUN_TIMESTAMP}"
+EXPORT_DIR="$CTU_ROOT/exports/${MODEL_NAME_SANITIZED}"_${RUN_TIMESTAMP}"
 
 if [ ! -d "$CKPT_DIR" ]; then
     echo "Creating checkpoint directory: $CKPT_DIR"
